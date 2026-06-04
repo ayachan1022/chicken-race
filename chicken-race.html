@@ -20,60 +20,53 @@ body{background:#e8e8e8;display:flex;justify-content:center;min-height:100vh;fon
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
-// ========================================
-// CSV読み込み・パース
-// ファイル: ./data/screener_result.csv（リポジトリルート）
-// 列構成: コード, 銘柄名, 市場, 現在値, 前日比(%), 時価総額(百万円)
-// 毎日このCSVを差し替えるだけでデータが更新される
-// ========================================
-const CSV_PATH = "./data/screener_result.csv";
+// ── CSV読み込み ───────────────────────────────
+// screener_result.csv をリポジトリルートに置く想定
+// 列構成: コード,銘柄名,市場,現在値,前日比(%),時価総額(百万円)
+// ローカル確認時は Live Server 等を使うこと（file:// では fetch が動かない）
+const CSV_PATH = "./screener_result.csv";
 
 function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/);
-  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
+  const headers = lines[0].split(",").map(h => h.trim());
+
+  // 必要な列のインデックスを動的に取得
   const idxCode = headers.findIndex(h => h === "コード");
   const idxName = headers.findIndex(h => h === "銘柄名");
   const idxCap  = headers.findIndex(h => h.includes("時価総額"));
+
   if (idxCode === -1 || idxName === -1 || idxCap === -1) {
     throw new Error(`CSVの列名が想定と異なります。\n見つかった列: ${headers.join(", ")}`);
   }
+
   return lines.slice(1).map(line => {
-    const cols = line.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
-    const code = cols[idxCode] || "";
-    const name = cols[idxName] || "";
-    const cap  = parseInt((cols[idxCap] || "").replace(/,/g, ""), 10);
+    const cols = line.split(",");
+    const code = (cols[idxCode] || "").trim();
+    const name = (cols[idxName] || "").trim();
+    const capRaw = (cols[idxCap] || "").trim().replace(/,/g, ""); // カンマ区切り数値に対応
+    const cap  = parseInt(capRaw, 10);
     return { code, name, cap };
   }).filter(r => r.code && r.name && !isNaN(r.cap) && r.cap > 0);
 }
 
-// 難易度ごとの目標金額（兆円）
 const TARGET = {easy:100, normal:50, hard:10};
-const C = "#434343"; // メインテキストカラー
+const C = "#434343";
 
-// 時価総額を「○○.○○兆円」形式に変換
 function fmtCap(cap){ return (cap/1000000).toFixed(2)+"兆円"; }
 
-
-// ========================================
-// ローディング画面
-// CSV取得中に表示される
-// ========================================
+// ── ローディング ──────────────────────────────
 function LoadingScreen() {
   return (
-    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100dvh",background:"#fff"}}>
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"#fff"}}>
       <div style={{fontSize:13,color:"#bbb"}}>データを読み込み中...</div>
     </div>
   );
 }
 
-
-// ========================================
-// エラー画面
-// CSV読み込み失敗時に表示される
-// ========================================
+// ── エラー ────────────────────────────────────
 function ErrorScreen({ message, onRetry }) {
   return (
-    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100dvh",background:"#fff",padding:"0 32px"}}>
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"#fff",padding:"0 32px"}}>
       <div style={{fontSize:28,marginBottom:12}}>⚠️</div>
       <div style={{fontSize:15,fontWeight:600,color:C,marginBottom:8,textAlign:"center"}}>データの読み込みに失敗しました</div>
       <div style={{fontSize:12,color:"#bbb",marginBottom:24,textAlign:"center",lineHeight:1.6}}>{message}</div>
@@ -82,14 +75,10 @@ function ErrorScreen({ message, onRetry }) {
   );
 }
 
-
-// ========================================
-// トップ画面
-// 「1人で遊ぶ」「2人で対戦する」の入口
-// ========================================
+// ── TOP ──────────────────────────────────────
 function TopScreen({onSolo, onVs}){
   return (
-    <div style={{display:"flex",flexDirection:"column",minHeight:"100dvh",background:"#fff"}}>
+    <div style={{display:"flex",flexDirection:"column",minHeight:"100vh",background:"#fff"}}>
       <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",padding:"0 32px"}}>
         <h1 style={{fontSize:36,fontWeight:700,lineHeight:1.3,color:C}}>
           時価総額<br/>チキンレース
@@ -104,11 +93,7 @@ function TopScreen({onSolo, onVs}){
   );
 }
 
-
-// ========================================
-// 難易度選択画面
-// Easy(100兆) / Normal(50兆) / Hard(10兆)
-// ========================================
+// ── DIFFICULTY ───────────────────────────────
 function DifficultyScreen({onBack, onDecide}){
   const [sel, setSel] = useState("normal");
   const diffs = [
@@ -117,7 +102,7 @@ function DifficultyScreen({onBack, onDecide}){
     {key:"hard",   label:"Hard",   amount:"10兆円",  sub:"上級者向け"},
   ];
   return (
-    <div style={{display:"flex",flexDirection:"column",minHeight:"100dvh",background:"#fff"}}>
+    <div style={{display:"flex",flexDirection:"column",minHeight:"100vh",background:"#fff"}}>
       <div style={{display:"flex",alignItems:"center",padding:"10px 14px",borderBottom:"0.5px solid #eee"}}>
         <button onClick={onBack} style={{background:"none",border:"none",fontSize:22,color:"#888",cursor:"pointer"}}>‹</button>
       </div>
@@ -150,11 +135,7 @@ function DifficultyScreen({onBack, onDecide}){
   );
 }
 
-
-// ========================================
-// ゲーム画面（1人プレイ）
-// 企業一覧から選択 → ドボン判定 or STOP or タイムアップで終了
-// ========================================
+// ── GAME ─────────────────────────────────────
 function GameScreen({difficulty, companies, onStop, onDobun, onTimeout}){
   const targetCap = TARGET[difficulty]*1000000;
   const [selected, setSelected] = useState([]);
@@ -198,7 +179,9 @@ function GameScreen({difficulty, companies, onStop, onDobun, onTimeout}){
   function doStop(){ clearInterval(timerRef.current); onStop(selected); }
 
   return (
-    <div style={{display:"flex",flexDirection:"column",height:"100dvh",position:"relative",background:"#f5f5f5"}}>
+    <div style={{display:"flex",flexDirection:"column",height:"100vh",position:"relative",background:"#f5f5f5"}}>
+
+      {/* ヘッダー */}
       <div style={{background:"#fff",borderBottom:"0.5px solid #e8e8e8",flexShrink:0}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px 0"}}>
           <button style={{background:"none",border:"none",fontSize:22,color:"#888",cursor:"default",padding:0,opacity:0.3}}>‹</button>
@@ -216,6 +199,7 @@ function GameScreen({difficulty, companies, onStop, onDobun, onTimeout}){
         </div>
       </div>
 
+      {/* 企業グリッド */}
       <div style={{flex:1,overflowY:"auto",padding:"10px 10px 0"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           {companies.map((c)=>{
@@ -237,11 +221,13 @@ function GameScreen({difficulty, companies, onStop, onDobun, onTimeout}){
         <div style={{height:10}}/>
       </div>
 
+      {/* 下部バー */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 14px",borderTop:"0.5px solid #e8e8e8",background:"#fff",flexShrink:0}}>
         <button onClick={()=>setShowList(true)} style={{border:"1px solid #ccc",background:"#fff",color:C,fontSize:13,padding:"7px 22px",borderRadius:8,cursor:"pointer"}}>自分のリスト</button>
         <button onClick={()=>setStopDlg(true)} style={{background:"#E24B4A",color:"#fff",border:"none",fontSize:13,fontWeight:600,padding:"7px 22px",borderRadius:8,cursor:"pointer"}}>STOP</button>
       </div>
 
+      {/* ドボン演出 */}
       {dobun && (
         <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:30}}>
           <div style={{textAlign:"center"}}>
@@ -251,6 +237,7 @@ function GameScreen({difficulty, companies, onStop, onDobun, onTimeout}){
         </div>
       )}
 
+      {/* 銘柄選択ポップアップ */}
       {popup && (
         <div onClick={()=>setPopup(null)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:16,margin:"0 20px",padding:"22px",width:"100%",maxWidth:310}}>
@@ -261,6 +248,7 @@ function GameScreen({difficulty, companies, onStop, onDobun, onTimeout}){
               </div>
               <button onClick={()=>setPopup(null)} style={{background:"none",border:"none",fontSize:20,color:"#ccc",cursor:"pointer"}}>✕</button>
             </div>
+            {/* 広告エリア */}
             <div style={{background:"#7B61FF",borderRadius:10,height:90,marginBottom:18,display:"flex",alignItems:"center",justifyContent:"center"}}>
               <span style={{color:"rgba(255,255,255,0.5)",fontSize:12}}>広告</span>
             </div>
@@ -269,6 +257,7 @@ function GameScreen({difficulty, companies, onStop, onDobun, onTimeout}){
         </div>
       )}
 
+      {/* STOPダイアログ */}
       {stopDlg && (
         <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:20}}>
           <div style={{background:"#fff",borderRadius:16,margin:"0 32px",padding:"24px",width:"100%",maxWidth:280}}>
@@ -282,6 +271,7 @@ function GameScreen({difficulty, companies, onStop, onDobun, onTimeout}){
         </div>
       )}
 
+      {/* 自分のリスト */}
       {showList && (
         <div onClick={()=>setShowList(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",zIndex:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",width:"100%",borderRadius:"16px 16px 0 0",padding:"20px",maxHeight:"70vh",overflowY:"auto"}}>
@@ -303,12 +293,7 @@ function GameScreen({difficulty, companies, onStop, onDobun, onTimeout}){
   );
 }
 
-
-// ========================================
-// 結果画面（1人プレイ）
-// クリア or ドボン の結果と選択銘柄一覧を表示
-// 「もう一度」→難易度選択へ / 「トップに戻る」→トップへ
-// ========================================
+// ── RESULT ───────────────────────────────────
 function ResultScreen({difficulty, selected, isDobun, onRetry, onTop}){
   const targetCap = TARGET[difficulty]*1000000;
   const total = selected.reduce((s,c)=>s+c.cap,0);
@@ -316,16 +301,18 @@ function ResultScreen({difficulty, selected, isDobun, onRetry, onTop}){
   const isOver= diff<0;
 
   return (
-    <div style={{display:"flex",flexDirection:"column",minHeight:"100dvh",background:"#fff"}}>
+    <div style={{display:"flex",flexDirection:"column",minHeight:"100vh",background:"#fff"}}>
       <div style={{padding:"32px 20px 20px",textAlign:"center",borderBottom:"0.5px solid #eee",position:"relative"}}>
+        {/* SNSシェアボタン（将来実装） */}
         <button style={{position:"absolute",right:16,top:14,background:"none",border:"none",fontSize:18,color:"#bbb",cursor:"pointer"}} title="シェア（近日公開）">↑</button>
         <div style={{fontSize:36,marginBottom:6}}>{isDobun?"💥":"🎉"}</div>
         <div style={{fontSize:30,fontWeight:700,color:isDobun?"#E24B4A":C}}>
           {isDobun?"ドボン！":"クリア！"}
         </div>
       </div>
+
       <div style={{padding:"12px 18px",borderBottom:"0.5px solid #eee"}}>
-        <div style={{fontSize:11,color:"#bbb",textAlign:"right",marginBottom:6}}>2025年4月末時点</div>
+        <div style={{fontSize:11,color:"#bbb",textAlign:"right",marginBottom:6}}>直近の終値を参考</div>
         {[
           ["目標金額",    fmtCap(targetCap), false],
           ["あなたの合計",fmtCap(total),     false],
@@ -337,9 +324,11 @@ function ResultScreen({difficulty, selected, isDobun, onRetry, onTop}){
           </div>
         ))}
       </div>
+
       <div style={{background:"#fafafa",padding:"5px 18px",borderBottom:"0.5px solid #eee"}}>
         <span style={{fontSize:11,color:"#bbb"}}>選択した銘柄（時価総額を初公開）</span>
       </div>
+
       <div style={{flex:1,overflowY:"auto"}}>
         {selected.length===0 && <p style={{textAlign:"center",color:"#bbb",fontSize:13,padding:"24px 0"}}>銘柄を選択しませんでした</p>}
         {selected.map((c)=>(
@@ -350,7 +339,9 @@ function ResultScreen({difficulty, selected, isDobun, onRetry, onTop}){
           </div>
         ))}
       </div>
+
       <div style={{padding:"12px 18px 40px",display:"flex",flexDirection:"column",gap:10}}>
+        {/* もう一度 → 難易度選択に戻る */}
         <button className="btn-dark" onClick={onRetry}>もう一度</button>
         <button className="btn-white" onClick={onTop}>トップに戻る</button>
       </div>
@@ -358,47 +349,63 @@ function ResultScreen({difficulty, selected, isDobun, onRetry, onTop}){
   );
 }
 
-
-// ========================================
-// App（画面管理）
-// screen state で表示する画面を切り替える
-// top → difficulty → game → result
-// ========================================
+// ── APP ──────────────────────────────────────
 function App(){
-  const [screen, setScreen]       = useState("top");
-  const [difficulty, setDiff]     = useState("normal");
-  const [result, setResult]       = useState({selected:[],isDobun:false});
-  const [gameKey, setGameKey]     = useState(0);
-  const [companies, setCompanies] = useState(null);
+  const [screen, setScreen]     = useState("top");
+  const [difficulty, setDiff]   = useState("normal");
+  const [result, setResult]     = useState({selected:[],isDobun:false});
+  const [gameKey, setGameKey]   = useState(0);
+  const [companies, setCompanies] = useState(null); // null=未ロード
   const [loadError, setLoadError] = useState(null);
 
-  useEffect(()=>{ loadCSV(); },[]);
+  // CSV読み込み（アプリ起動時に1回）
+  useEffect(()=>{
+    loadCSV();
+  },[]);
 
   function loadCSV(){
     setLoadError(null);
     setCompanies(null);
     fetch(CSV_PATH)
-      .then(res=>{ if(!res.ok) throw new Error(`HTTPエラー ${res.status}`); return res.text(); })
+      .then(res=>{
+        if(!res.ok) throw new Error(`HTTPエラー ${res.status}`);
+        return res.text();
+      })
       .then(text=>{
         const data = parseCSV(text);
         if(data.length===0) throw new Error("CSVにデータがありません");
+        // 銘柄コード順にソート
         data.sort((a,b)=>a.code.localeCompare(b.code, undefined, {numeric:true}));
         setCompanies(data);
       })
-      .catch(err=>{ setLoadError(err.message || "不明なエラー"); });
+      .catch(err=>{
+        setLoadError(err.message || "不明なエラー");
+      });
   }
 
-  function goResult(selected,isDobun){ setResult({selected,isDobun}); setScreen("result"); }
+  function goResult(selected,isDobun){
+    setResult({selected,isDobun});
+    setScreen("result");
+  }
 
-  if(companies===null && loadError===null) return <LoadingScreen />;
-  if(loadError) return <ErrorScreen message={loadError} onRetry={loadCSV} />;
+  // CSV読み込み中
+  if(companies===null && loadError===null){
+    return <LoadingScreen />;
+  }
+
+  // CSV読み込み失敗
+  if(loadError){
+    return <ErrorScreen message={loadError} onRetry={loadCSV} />;
+  }
 
   return (
     <>
       {screen==="top"        && <TopScreen onSolo={()=>setScreen("difficulty")} onVs={()=>alert("2人対戦は近日公開！")}/>}
       {screen==="difficulty" && <DifficultyScreen onBack={()=>setScreen("top")} onDecide={d=>{setDiff(d);setGameKey(k=>k+1);setScreen("game");}}/>}
       {screen==="game"       && <GameScreen key={gameKey} difficulty={difficulty} companies={companies} onStop={s=>goResult(s,false)} onDobun={s=>goResult(s,true)} onTimeout={s=>goResult(s,false)}/>}
-      {screen==="result"     && <ResultScreen difficulty={difficulty} selected={result.selected} isDobun={result.isDobun} onRetry={()=>setScreen("difficulty")} onTop={()=>setScreen("top")}/>}
+      {screen==="result"     && <ResultScreen difficulty={difficulty} selected={result.selected} isDobun={result.isDobun}
+        onRetry={()=>setScreen("difficulty")}  {/* もう一度 → 難易度選択へ */}
+        onTop={()=>setScreen("top")}/>}
     </>
   );
 }
