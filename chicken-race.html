@@ -22,11 +22,11 @@ const { useState, useEffect, useRef } = React;
 
 // ========================================
 // CSV読み込み・パース
-// ファイル: ./screener_result.csv（リポジトリルート）
+// ファイル: ./data/screener_result.csv（リポジトリルート）
 // 列構成: コード, 銘柄名, 市場, 現在値, 前日比(%), 時価総額(百万円)
 // 毎日このCSVを差し替えるだけでデータが更新される
 // ========================================
-const CSV_PATH = "./screener_result.csv";
+const CSV_PATH = "./data/screener_result.csv";
 
 function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/);
