@@ -24,7 +24,7 @@ const CSV_PATH = "./screener_result.csv";
 
 function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/);
-  const headers = lines[0].split(",").map(h => h.trim());
+  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
   const idxCode = headers.findIndex(h => h === "コード");
   const idxName = headers.findIndex(h => h === "銘柄名");
   const idxCap  = headers.findIndex(h => h.includes("時価総額"));
@@ -32,11 +32,10 @@ function parseCSV(text) {
     throw new Error(`CSVの列名が想定と異なります。\n見つかった列: ${headers.join(", ")}`);
   }
   return lines.slice(1).map(line => {
-    const cols = line.split(",");
-    const code = (cols[idxCode] || "").trim();
-    const name = (cols[idxName] || "").trim();
-    const capRaw = (cols[idxCap] || "").trim().replace(/,/g, "");
-    const cap  = parseInt(capRaw, 10);
+    const cols = line.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
+    const code = cols[idxCode] || "";
+    const name = cols[idxName] || "";
+    const cap  = parseInt((cols[idxCap] || "").replace(/,/g, ""), 10);
     return { code, name, cap };
   }).filter(r => r.code && r.name && !isNaN(r.cap) && r.cap > 0);
 }
@@ -321,10 +320,10 @@ function ResultScreen({difficulty, selected, isDobun, onRetry, onTop}){
 }
 
 function App(){
-  const [screen, setScreen]     = useState("top");
-  const [difficulty, setDiff]   = useState("normal");
-  const [result, setResult]     = useState({selected:[],isDobun:false});
-  const [gameKey, setGameKey]   = useState(0);
+  const [screen, setScreen]       = useState("top");
+  const [difficulty, setDiff]     = useState("normal");
+  const [result, setResult]       = useState({selected:[],isDobun:false});
+  const [gameKey, setGameKey]     = useState(0);
   const [companies, setCompanies] = useState(null);
   const [loadError, setLoadError] = useState(null);
 
