@@ -32,25 +32,45 @@ const { useState, useEffect, useRef } = React;
 const CSV_PATH = "./data/screener_result.csv";
 
 function parseCSV(text) {
- const lines = text.trim().split(/\r?\n/);
- const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
- const idxCode = headers.findIndex(h => h === "コード");
- const idxName = headers.findIndex(h => h === "銘柄名");
- const idxOku  = headers.findIndex(h => h.includes("時価総額(億円)") || h.includes("時価総額（億円）"));
- const idxCho  = headers.findIndex(h => h.includes("時価総額(兆円)") || h.includes("時価総額（兆円）"));
- const idxRank = headers.findIndex(h => h === "ランク");
- if (idxCode===-1 || idxName===-1 || idxOku===-1 || idxCho===-1 || idxRank===-1) {
-   throw new Error(`CSVの列名が想定と異なります。\n見つかった列: ${headers.join(", ")}`);
- }
- return lines.slice(1).map(line => {
-   const cols = line.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
-   const code = cols[idxCode] || "";
-   const name = cols[idxName] || "";
-   const oku  = parseFloat((cols[idxOku]||"").replace(/,/g,"")) || 0;
-   const cho  = parseFloat((cols[idxCho]||"").replace(/,/g,"")) || 0;
-   const rank = cols[idxRank] || "";
-   return { code, name, oku, cho, rank };
- }).filter(r => r.code && r.name && r.cho > 0 && r.rank);
+  // クォート対応のCSVパーサー
+  function parseLine(line) {
+    const result = [];
+    let cur = "";
+    let inQuote = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        inQuote = !inQuote;
+      } else if (ch === "," && !inQuote) {
+        result.push(cur.trim());
+        cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    result.push(cur.trim());
+    return result;
+  }
+
+  const lines = text.trim().split(/\r?\n/);
+  const headers = parseLine(lines[0]).map(h => h.replace(/^"|"$/g, ""));
+  const idxCode = headers.findIndex(h => h === "コード");
+  const idxName = headers.findIndex(h => h === "銘柄名");
+  const idxOku  = headers.findIndex(h => h.includes("時価総額(億円)") || h.includes("時価総額（億円）"));
+  const idxCho  = headers.findIndex(h => h.includes("時価総額(兆円)") || h.includes("時価総額（兆円）"));
+  const idxRank = headers.findIndex(h => h === "ランク");
+  if (idxCode===-1 || idxName===-1 || idxOku===-1 || idxCho===-1 || idxRank===-1) {
+    throw new Error(`CSVの列名が想定と異なります。\n見つかった列: ${headers.join(", ")}`);
+  }
+  return lines.slice(1).map(line => {
+    const cols = parseLine(line);
+    const code = cols[idxCode] || "";
+    const name = cols[idxName] || "";
+    const oku  = parseFloat((cols[idxOku]||"").replace(/,/g,"")) || 0;
+    const cho  = parseFloat((cols[idxCho]||"").replace(/,/g,"")) || 0;
+    const rank = cols[idxRank] || "";
+    return { code, name, oku, cho, rank };
+  }).filter(r => r.code && r.name && r.cho > 0 && r.rank);
 }
 
 // ========================================
