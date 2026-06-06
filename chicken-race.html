@@ -12,6 +12,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;}
@@ -116,13 +117,11 @@ function selectCompanies(allCompanies) {
 const TARGET = {easy:100, normal:50, hard:10};
 const C = "#434343";
 
-// ルームID生成（6桁英数字）
 function generateRoomId() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return Array.from({length:6}, ()=>chars[Math.floor(Math.random()*chars.length)]).join("");
 }
 
-// 数値フォーマット
 function addComma(n){ return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
 function fmtCho(triVal){
   const [intPart, decPart] = triVal.toFixed(2).split(".");
@@ -134,7 +133,6 @@ function fmtOku(triVal){
 function fmt(triVal, unit){
   return unit==="oku" ? fmtOku(triVal) : fmtCho(triVal);
 }
-
 
 // ========================================
 // ローディング画面
@@ -174,7 +172,7 @@ function TopScreen({onSolo, onVs}){
       </div>
       <div style={{padding:"0 24px 48px",display:"flex",flexDirection:"column",gap:10,flexShrink:0}}>
         <button className="btn-dark" onClick={onSolo}>1人で遊ぶ</button>
-        <button className="btn-white" onClick={onVs}>2人で対戦する</button>
+        <button className="btn-dark" onClick={onVs}>2人で遊ぶ</button>
         <button style={{background:"none",border:"none",color:"#bbb",fontSize:13,marginTop:4,cursor:"pointer",fontFamily:"inherit"}}>遊び方を見る →</button>
       </div>
     </div>
@@ -202,14 +200,14 @@ function DifficultyScreen({onBack, onDecide}){
             <button key={d.key} onClick={()=>onDecide(d.key)} style={{
               display:"flex",justifyContent:"space-between",alignItems:"center",
               padding:"18px 18px",borderRadius:12,
-              border:"1.5px solid #e0e0e0",
-              background:"#fff",cursor:"pointer",textAlign:"left",fontFamily:"inherit"
+              border:"none",
+              background:"#434343",cursor:"pointer",textAlign:"left",fontFamily:"inherit"
             }}>
               <div>
-                <div style={{fontSize:15,fontWeight:500,color:C}}>{d.label}</div>
-                <div style={{fontSize:12,color:"#bbb",marginTop:2}}>{d.sub}</div>
+                <div style={{fontSize:15,fontWeight:500,color:"#fff"}}>{d.label}</div>
+                <div style={{fontSize:12,color:"#aaa",marginTop:2}}>{d.sub}</div>
               </div>
-              <div style={{fontSize:17,fontWeight:600,color:C}}>{d.amount}</div>
+              <div style={{fontSize:17,fontWeight:600,color:"#fff"}}>{d.amount}</div>
             </button>
           ))}
         </div>
@@ -472,13 +470,25 @@ function ResultScreen({difficulty, selected, isDobun, guesses, onRetry, onTop}){
 function RoomWaitScreen({roomId, role, difficulty, guestJoined, onStart, onLeave}){
   const url = `${location.origin}${location.pathname}?room=${roomId}`;
   const [copied, setCopied] = useState(false);
+  const qrRef = useRef(null);
+  const qrInstanceRef = useRef(null);
+
+  useEffect(()=>{
+    if(qrRef.current && !qrInstanceRef.current){
+      qrInstanceRef.current = new QRCode(qrRef.current, {
+        text: url,
+        width: 180,
+        height: 180,
+        colorDark: "#434343",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+    }
+  },[]);
 
   function copyUrl(){
     navigator.clipboard.writeText(url).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); });
   }
-
-  // QRコードはGoogle Charts APIで生成
-  const qrUrl = `https://chart.googleapis.com/chart?chs=180x180&cht=qr&chl=${encodeURIComponent(url)}`;
 
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100dvh",background:"#fff"}}>
@@ -488,24 +498,15 @@ function RoomWaitScreen({roomId, role, difficulty, guestJoined, onStart, onLeave
       </div>
 
       <div style={{flex:1,overflowY:"auto",padding:"24px 20px"}}>
-        {/* 難易度表示 */}
         <div style={{background:"#f5f5f5",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontSize:12,color:"#aaa"}}>難易度</span>
           <span style={{fontSize:14,fontWeight:600,color:C}}>{difficulty==="easy"?"Easy / 100兆円":difficulty==="normal"?"Normal / 50兆円":"Hard / 10兆円"}</span>
         </div>
 
-        {/* ルームID */}
-        <div style={{textAlign:"center",marginBottom:20}}>
-          <div style={{fontSize:11,color:"#bbb",marginBottom:6}}>ルームID</div>
-          <div style={{fontSize:32,fontWeight:700,color:C,letterSpacing:6}}>{roomId}</div>
-        </div>
-
-        {/* QRコード */}
         <div style={{display:"flex",justifyContent:"center",marginBottom:16}}>
-          <img src={qrUrl} alt="QRコード" style={{width:180,height:180,borderRadius:8,border:"1px solid #eee"}}/>
+          <div ref={qrRef} style={{borderRadius:8,border:"1px solid #eee",overflow:"hidden",lineHeight:0}}/>
         </div>
 
-        {/* URL共有 */}
         <div style={{display:"flex",gap:8,marginBottom:24}}>
           <div style={{flex:1,background:"#f5f5f5",borderRadius:8,padding:"10px 12px",fontSize:11,color:"#aaa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{url}</div>
           <button onClick={copyUrl} style={{background:"#434343",color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",fontSize:12,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
@@ -513,7 +514,6 @@ function RoomWaitScreen({roomId, role, difficulty, guestJoined, onStart, onLeave
           </button>
         </div>
 
-        {/* 入室状況 */}
         <div style={{borderRadius:10,border:"1px solid #eee",overflow:"hidden",marginBottom:24}}>
           {[
             {label:"ホスト", joined:true},
@@ -527,12 +527,8 @@ function RoomWaitScreen({roomId, role, difficulty, guestJoined, onStart, onLeave
         </div>
 
         {role==="host" && (
-          <button
-            className="btn-dark"
-            onClick={onStart}
-            disabled={!guestJoined}
-            style={{opacity:guestJoined?1:0.4,cursor:guestJoined?"pointer":"not-allowed"}}
-          >
+          <button className="btn-dark" onClick={onStart} disabled={!guestJoined}
+            style={{opacity:guestJoined?1:0.4,cursor:guestJoined?"pointer":"not-allowed"}}>
             ゲームを開始する
           </button>
         )}
@@ -550,17 +546,17 @@ function RoomWaitScreen({roomId, role, difficulty, guestJoined, onStart, onLeave
 function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
   const targetTri = TARGET[difficulty];
   const [mySelected, setMySelected]     = useState([]);
-  const [oppSelected, setOppSelected]   = useState([]); // {code, name} の配列（選択順）
-  const [allSelCodes, setAllSelCodes]   = useState(new Set()); // 両者合計のgreyout用
+  const [oppSelected, setOppSelected]   = useState([]);
+  const [allSelCodes, setAllSelCodes]   = useState(new Set());
   const [popup, setPopup]               = useState(null);
   const [stopDlg, setStopDlg]           = useState(false);
   const [showMyList, setShowMyList]     = useState(false);
   const [showOppList, setShowOppList]   = useState(false);
-  const [toast, setToast]               = useState(null); // 相手が選んだ通知
+  const [toast, setToast]               = useState(null);
   const [toastKey, setToastKey]         = useState(0);
   const [myStopped, setMyStopped]       = useState(false);
   const [oppStopped, setOppStopped]     = useState(false);
-  const [timeLeft, setTimeLeft]         = useState(null); // 2分タイマー（片方STOP後）
+  const [timeLeft, setTimeLeft]         = useState(null);
   const [guesses, setGuesses]           = useState({});
   const [disconnected, setDisconnected] = useState(false);
 
@@ -570,20 +566,15 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
   const oppRole     = role==="host" ? "guest" : "host";
   const roomRef     = db.ref(`rooms/${roomId}`);
 
-  // Firebase購読
   useEffect(()=>{
-    const mySelRef2  = roomRef.child(`players/${role}/selections`);
     const oppSelRef  = roomRef.child(`players/${oppRole}/selections`);
     const oppStopRef = roomRef.child(`players/${oppRole}/stopped`);
     const oppConRef  = roomRef.child(`players/${oppRole}/connected`);
-    const timerTrigRef = roomRef.child("timer/triggerStopAt");
 
-    // 相手の選択を購読
     const prevOppCodes = new Set();
     oppSelRef.on("value", snap=>{
       const data = snap.val() || {};
       const codes = Object.keys(data);
-      // 新しく追加されたコードを検出してトースト表示
       codes.forEach(code=>{
         if(!prevOppCodes.has(code)){
           prevOppCodes.add(code);
@@ -596,45 +587,25 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
       });
       const oppList = codes.map(code=>companies.find(c=>c.code===code)).filter(Boolean);
       setOppSelected(oppList);
-      setAllSelCodes(prev=>{
-        const next = new Set(prev);
-        codes.forEach(c=>next.add(c));
-        return next;
-      });
+      setAllSelCodes(prev=>{ const next = new Set(prev); codes.forEach(c=>next.add(c)); return next; });
     });
 
-    // 相手のSTOP購読
     oppStopRef.on("value", snap=>{
       if(snap.val()===true){
         setOppStopped(true);
-        // 相手がSTOPしたら2分タイマー開始（自分がまだSTOPしていない場合）
-        setMyStopped(my=>{
-          if(!my){
-            setTimeLeft(120);
-          }
-          return my;
-        });
+        setMyStopped(my=>{ if(!my){ setTimeLeft(120); } return my; });
       }
     });
 
-    // 切断検知
-    oppConRef.on("value", snap=>{
-      if(snap.val()===false){ setDisconnected(true); }
-    });
+    oppConRef.on("value", snap=>{ if(snap.val()===false){ setDisconnected(true); } });
 
-    // 自分の切断時の処理を登録
     const myConRef = roomRef.child(`players/${role}/connected`);
     myConRef.set(true);
     myConRef.onDisconnect().set(false);
 
-    return ()=>{
-      oppSelRef.off();
-      oppStopRef.off();
-      oppConRef.off();
-    };
+    return ()=>{ oppSelRef.off(); oppStopRef.off(); oppConRef.off(); };
   },[]);
 
-  // 2分タイマー
   useEffect(()=>{
     if(timeLeft===null) return;
     if(timeLeft<=0){ handleGameEnd(); return; }
@@ -642,10 +613,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
     return ()=>clearTimeout(timerRef.current);
   },[timeLeft]);
 
-  // 切断時の処理
-  useEffect(()=>{
-    if(disconnected){ setTimeout(()=>handleGameEnd(true), 1500); }
-  },[disconnected]);
+  useEffect(()=>{ if(disconnected){ setTimeout(()=>handleGameEnd(true), 1500); } },[disconnected]);
 
   function handleGameEnd(isDisconnect=false){
     clearTimeout(timerRef.current);
@@ -661,9 +629,8 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
 
   function confirmSelect(){
     const c=popup; setPopup(null);
-    // Firebaseに書き込み（早い者勝ち：transactionで排他制御）
     roomRef.child(`players/${role}/selections/${c.code}`).transaction(current=>{
-      if(current !== null) return; // すでに誰かが選んでいたらキャンセル
+      if(current !== null) return;
       return true;
     }, (err, committed)=>{
       if(committed){
@@ -679,9 +646,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
     setMyStopped(true);
     roomRef.child(`players/${role}/stopped`).set(true);
     roomRef.child(`players/${role}/stoppedAt`).set(firebase.database.ServerValue.TIMESTAMP);
-    // 相手がすでにSTOP済みなら即終了
     if(oppStopped){ handleGameEnd(); }
-    // そうでなければ相手の2分タイマーはFirebase購読で自動発生
   }
 
   const mm = timeLeft!==null ? String(Math.floor(timeLeft/60)).padStart(2,"0") : "--";
@@ -689,13 +654,10 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
 
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100dvh",position:"relative",background:"#f5f5f5",overflow:"hidden"}}>
-      {/* ヘッダー */}
       <div style={{background:"#fff",borderBottom:"0.5px solid #e8e8e8",flexShrink:0}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px 0"}}>
           <span style={{fontSize:12,color:"#bbb"}}>{role==="host"?"ホスト":"ゲスト"}</span>
-          {timeLeft!==null && (
-            <span style={{fontSize:13,fontWeight:700,color:"#E24B4A"}}>残り {mm}:{ss}</span>
-          )}
+          {timeLeft!==null && <span style={{fontSize:13,fontWeight:700,color:"#E24B4A"}}>残り {mm}:{ss}</span>}
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 14px 10px"}}>
           <span style={{fontSize:16,fontWeight:700,color:C,textDecoration:"underline",textUnderlineOffset:3}}>
@@ -708,7 +670,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       </div>
 
-      {/* 企業グリッド */}
       <div style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"10px 10px 0"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           {companies.map((c)=>{
@@ -734,25 +695,19 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         <div style={{height:10}}/>
       </div>
 
-      {/* 下部バー */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",borderTop:"0.5px solid #e8e8e8",background:"#fff",flexShrink:0,gap:6}}>
         <button onClick={()=>setShowMyList(true)} style={{flex:1,border:"1px solid #ccc",background:"#fff",color:C,fontSize:12,padding:"7px 4px",borderRadius:8,cursor:"pointer",fontFamily:"inherit"}}>自分のリスト</button>
         <button onClick={()=>setShowOppList(true)} style={{flex:1,border:"1px solid #E24B4A",background:"#fff",color:"#E24B4A",fontSize:12,padding:"7px 4px",borderRadius:8,cursor:"pointer",fontFamily:"inherit"}}>相手のリスト</button>
-        <button
-          onClick={()=>{ if(!myStopped) setStopDlg(true); }}
-          disabled={myStopped}
-          style={{flex:1,background:myStopped?"#ccc":"#E24B4A",color:"#fff",border:"none",fontSize:12,fontWeight:600,padding:"7px 4px",borderRadius:8,cursor:myStopped?"default":"pointer",fontFamily:"inherit"}}
-        >STOP</button>
+        <button onClick={()=>{ if(!myStopped) setStopDlg(true); }} disabled={myStopped}
+          style={{flex:1,background:myStopped?"#ccc":"#E24B4A",color:"#fff",border:"none",fontSize:12,fontWeight:600,padding:"7px 4px",borderRadius:8,cursor:myStopped?"default":"pointer",fontFamily:"inherit"}}>STOP</button>
       </div>
 
-      {/* 相手選択トースト */}
       {toast && (
         <div key={toastKey} className="opponent-toast">
           相手は「{toast}」を選びました
         </div>
       )}
 
-      {/* 銘柄選択ポップアップ */}
       {popup && (
         <div onClick={()=>setPopup(null)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:16,margin:"0 20px",padding:"22px",width:"100%",maxWidth:310}}>
@@ -771,7 +726,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       )}
 
-      {/* STOPダイアログ */}
       {stopDlg && (
         <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:20}}>
           <div style={{background:"#fff",borderRadius:16,margin:"0 32px",padding:"24px",width:"100%",maxWidth:280}}>
@@ -785,7 +739,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       )}
 
-      {/* 自分のリスト */}
       {showMyList && (
         <div onClick={()=>setShowMyList(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",zIndex:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",width:"100%",borderRadius:"16px 16px 0 0",padding:"20px",maxHeight:"70vh",display:"flex",flexDirection:"column"}}>
@@ -822,7 +775,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       )}
 
-      {/* 相手のリスト */}
       {showOppList && (
         <div onClick={()=>setShowOppList(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",zIndex:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",width:"100%",borderRadius:"16px 16px 0 0",padding:"20px",maxHeight:"70vh",display:"flex",flexDirection:"column"}}>
@@ -843,7 +795,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       )}
 
-      {/* 切断通知 */}
       {disconnected && (
         <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:30}}>
           <div style={{background:"#fff",borderRadius:16,padding:"28px 24px",textAlign:"center",margin:"0 32px"}}>
@@ -904,7 +855,6 @@ function VsResultScreen({difficulty, mySelected, oppSelected, role, isDisconnect
 
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100dvh",background:"#fff",overflow:"hidden"}}>
-      {/* ヘッダー */}
       <div style={{padding:"24px 20px 16px",textAlign:"center",borderBottom:"0.5px solid #eee",position:"relative",flexShrink:0}}>
         <div style={{position:"absolute",right:16,top:14,display:"flex",borderRadius:6,border:"1px solid #e0e0e0",overflow:"hidden",fontSize:11}}>
           <button onClick={()=>setUnit("cho")} style={{padding:"3px 8px",border:"none",cursor:"pointer",fontFamily:"inherit",background:unit==="cho"?"#434343":"#fff",color:unit==="cho"?"#fff":"#aaa"}}>兆</button>
@@ -917,7 +867,6 @@ function VsResultScreen({difficulty, mySelected, oppSelected, role, isDisconnect
         )}
       </div>
 
-      {/* スコアサマリー */}
       <div style={{padding:"12px 18px",borderBottom:"0.5px solid #eee",flexShrink:0}}>
         <div style={{fontSize:11,color:"#bbb",textAlign:"right",marginBottom:6}}>直近の終値を参考</div>
         <div style={{display:"flex",gap:4,fontSize:11,color:"#bbb",marginBottom:4}}>
@@ -938,7 +887,6 @@ function VsResultScreen({difficulty, mySelected, oppSelected, role, isDisconnect
         ))}
       </div>
 
-      {/* 銘柄一覧（縦に並べて表示） */}
       <div style={{flex:1,overflowY:"auto"}}>
         <CompanyList list={mySelected}  label={role==="host"?"ホスト（自分）":"ゲスト（自分）"}  isDobun={myDobun}/>
         {!isDisconnect && <CompanyList list={oppSelected} label={role==="host"?"ゲスト（相手）":"ホスト（相手）"} isDobun={oppDobun}/>}
@@ -958,7 +906,7 @@ function VsResultScreen({difficulty, mySelected, oppSelected, role, isDisconnect
 function App(){
   const [screen, setScreen]             = useState("top");
   const [difficulty, setDiff]           = useState("normal");
-  const [mode, setMode]                 = useState("solo"); // "solo" | "vs"
+  const [mode, setMode]                 = useState("solo");
   const [result, setResult]             = useState({selected:[],isDobun:false,guesses:{}});
   const [vsResult, setVsResult]         = useState({mySelected:[],oppSelected:[],isDisconnect:false});
   const [gameKey, setGameKey]           = useState(0);
@@ -966,13 +914,12 @@ function App(){
   const [companies, setCompanies]       = useState([]);
   const [loadError, setLoadError]       = useState(null);
   const [roomId, setRoomId]             = useState(null);
-  const [role, setRole]                 = useState(null); // "host" | "guest"
+  const [role, setRole]                 = useState(null);
   const [uid, setUid]                   = useState(null);
   const [guestJoined, setGuestJoined]   = useState(false);
 
   useEffect(()=>{ loadCSV(); },[]);
 
-  // URLパラメータからルームIDを取得（ゲスト入室）
   useEffect(()=>{
     const params = new URLSearchParams(location.search);
     const rid = params.get("room");
@@ -980,14 +927,12 @@ function App(){
       setRoomId(rid);
       setRole("guest");
       setMode("vs");
-      // Firebase認証してゲストとして入室
       auth.signInAnonymously().then(cred=>{
         setUid(cred.user.uid);
         const roomRef = db.ref(`rooms/${rid}`);
         roomRef.child("players/guest/uid").set(cred.user.uid);
         roomRef.child("players/guest/connected").set(true);
         roomRef.child("players/guest/connected").onDisconnect().set(false);
-        // ルームの状態を購読してゲーム開始を待つ
         roomRef.child("status").on("value", snap=>{
           if(snap.val()==="playing"){
             roomRef.child("difficulty").once("value", dSnap=>{
@@ -999,7 +944,6 @@ function App(){
         setScreen("roomwait");
       });
     } else {
-      // 通常起動：Anonymous認証
       auth.signInAnonymously().then(cred=>setUid(cred.user.uid));
     }
   },[]);
@@ -1028,16 +972,14 @@ function App(){
     setScreen("result");
   }
 
-  // ルーム作成（ホスト）
   function createRoom(diff){
     setDiff(diff);
     const rid = generateRoomId();
     setRoomId(rid);
     setRole("host");
     setMode("vs");
-    setGameKey(k=>k+1); // companiesをリセット
+    setGameKey(k=>k+1);
 
-    // 認証済みUIDを確実に取得（uid stateがnullの場合に備えてauth.currentUserから直接取得）
     const hostUid = (auth.currentUser && auth.currentUser.uid) ? auth.currentUser.uid : uid;
 
     const roomRef = db.ref(`rooms/${rid}`);
@@ -1054,21 +996,15 @@ function App(){
     });
     roomRef.child("players/host/connected").onDisconnect().set(false);
 
-    // ゲスト入室を監視
     roomRef.child("players/guest/connected").on("value", snap=>{
       if(snap.val()===true) setGuestJoined(true);
     });
 
-    // 企業データをFirebaseに書き込み（ゲームのcompaniesを同期）
-    // ※ companiesはゲーム開始時に書き込む
-
     setScreen("roomwait");
   }
 
-  // ゲーム開始（ホストのみ）
   function startVsGame(){
     const roomRef = db.ref(`rooms/${roomId}`);
-    // companiesをFirebaseに保存
     const companiesObj = {};
     companies.forEach(c=>{ companiesObj[c.code]={name:c.name, oku:c.oku, cho:c.cho}; });
     roomRef.child("companies").set(companiesObj);
@@ -1097,11 +1033,8 @@ function App(){
         <DifficultyScreen
           onBack={()=>setScreen("top")}
           onDecide={d=>{
-            if(mode==="solo"){
-              setDiff(d); setGameKey(k=>k+1); setScreen("game");
-            } else {
-              createRoom(d);
-            }
+            if(mode==="solo"){ setDiff(d); setGameKey(k=>k+1); setScreen("game"); }
+            else { createRoom(d); }
           }}
         />
       )}
