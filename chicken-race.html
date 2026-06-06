@@ -403,9 +403,13 @@ function ResultScreen({difficulty, selected, isDobun, guesses, onRetry, onTop}){
   function addComma(n){ return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
 
   function fmt(triVal){
-    if(unit==="oku") return addComma(Math.round(triVal*10000))+"億円";
-    return addComma(triVal.toFixed(2))+"兆円";
-  }
+  if(unit==="oku") return addComma(Math.round(triVal*10000))+"億円";
+  // toFixed(2)の結果をそのまま文字列として addComma に渡す
+  const str = triVal.toFixed(2); // 例: "12.58"
+  const parts = str.split(".");
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return parts.join(".") + "兆円";
+}
 
   function fmtGuess(c){
     const cho = parseFloat((guesses[c.code]||{}).cho||"0")||0;
