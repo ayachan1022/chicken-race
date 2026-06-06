@@ -15,19 +15,6 @@ body{background:#e8e8e8;display:flex;justify-content:center;font-family:'Sawarab
 #root{width:100%;max-width:430px;height:100dvh;background:#f5f5f5;position:relative;overflow:hidden;}
 .btn-dark{width:100%;background:#434343;color:#fff;border:none;border-radius:12px;padding:15px;font-size:15px;font-family:inherit;font-weight:500;cursor:pointer;}
 .btn-white{width:100%;background:#fff;color:#434343;border:1.5px solid #d0d0d0;border-radius:12px;padding:14px;font-size:15px;font-family:inherit;cursor:pointer;}
-@keyframes dobunFade{
-  0%  {opacity:1;}
-  70% {opacity:1;}
-  100%{opacity:0;}
-}
-.dobun-overlay{
-  position:absolute;inset:0;
-  background:rgba(0,0,0,0.65);
-  display:flex;align-items:center;justify-content:center;
-  z-index:30;
-  animation:dobunFade 1.8s ease forwards;
-  pointer-events:none;
-}
 </style>
 </head>
 <body>
@@ -204,7 +191,8 @@ function DifficultyScreen({onBack, onDecide}){
 
 // ========================================
 // ゲーム画面（1人プレイ）
-// 企業一覧から選択 → ドボン判定 or STOP or タイムアップで終了
+// 企業一覧から選択 → STOP or タイムアップで終了
+// ドボン判定は結果画面でのみ表示（ゲーム中は演出なし）
 // 自分のリストに仮計算入力欄あり（兆・億の2欄）
 // ========================================
 function GameScreen({difficulty, companies, onStop, onTimeout}){
@@ -214,7 +202,6 @@ function GameScreen({difficulty, companies, onStop, onTimeout}){
   const [stopDlg, setStopDlg]   = useState(false);
   const [showList, setShowList] = useState(false);
   const [timeLeft, setTimeLeft] = useState(300);
-  const [dobunKey, setDobunKey] = useState(0); // 0=未発生、1以上=ドボン発生回数
   const [guesses, setGuesses]   = useState({}); // {code: {cho:string, oku:string}}
   const timerRef    = useRef(null);
   const selRef      = useRef([]);
@@ -241,15 +228,15 @@ function GameScreen({difficulty, companies, onStop, onTimeout}){
     if(selCodes.has(c.code)) return;
     setPopup(c);
   }
+
   function confirmSelect(){
     const c=popup; setPopup(null);
     const next=[...selected,c];
-    setSelected(next); selRef.current=next;
-    const total=next.reduce((s,x)=>s+x.cho,0);
-    if(total>targetTri){
-      setDobunKey(k=>k+1); // キーを変えることでアニメーションを再トリガー
-    }
+    setSelected(next);
+    selRef.current=next;
+    // ドボン判定なし：目標超過してもゲーム続行、結果画面で初めて発覚
   }
+
   function doStop(){ clearInterval(timerRef.current); onStopRef.current(selected, guessRef.current); }
 
   return (
@@ -301,16 +288,6 @@ function GameScreen({difficulty, companies, onStop, onTimeout}){
         <button onClick={()=>setShowList(true)} style={{border:"1px solid #ccc",background:"#fff",color:C,fontSize:13,padding:"7px 22px",borderRadius:8,cursor:"pointer",fontFamily:"inherit"}}>自分のリスト</button>
         <button onClick={()=>setStopDlg(true)} style={{background:"#E24B4A",color:"#fff",border:"none",fontSize:13,fontWeight:600,padding:"7px 22px",borderRadius:8,cursor:"pointer",fontFamily:"inherit"}}>STOP</button>
       </div>
-
-      {/* ドボン演出（CSSアニメーションで自動フェードアウト） */}
-      {dobunKey > 0 && (
-        <div key={dobunKey} className="dobun-overlay">
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:64}}>💥</div>
-            <div style={{fontSize:44,fontWeight:700,color:"#E24B4A",marginTop:8}}>ドボン！</div>
-          </div>
-        </div>
-      )}
 
       {/* 銘柄選択ポップアップ */}
       {popup && (
@@ -541,7 +518,6 @@ function App(){
     setResult({selected, isDobun, guesses});
     setScreen("result");
   }
-
 
   if(allCompanies===null && loadError===null) return <LoadingScreen />;
   if(loadError) return <ErrorScreen message={loadError} onRetry={loadCSV} />;
