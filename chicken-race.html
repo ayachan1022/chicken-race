@@ -15,6 +15,19 @@ body{background:#e8e8e8;display:flex;justify-content:center;font-family:'Sawarab
 #root{width:100%;max-width:430px;height:100dvh;background:#f5f5f5;position:relative;overflow:hidden;}
 .btn-dark{width:100%;background:#434343;color:#fff;border:none;border-radius:12px;padding:15px;font-size:15px;font-family:inherit;font-weight:500;cursor:pointer;}
 .btn-white{width:100%;background:#fff;color:#434343;border:1.5px solid #d0d0d0;border-radius:12px;padding:14px;font-size:15px;font-family:inherit;cursor:pointer;}
+@keyframes dobunFade{
+  0%  {opacity:1;}
+  70% {opacity:1;}
+  100%{opacity:0;}
+}
+.dobun-overlay{
+  position:absolute;inset:0;
+  background:rgba(0,0,0,0.65);
+  display:flex;align-items:center;justify-content:center;
+  z-index:30;
+  animation:dobunFade 1.8s ease forwards;
+  pointer-events:none;
+}
 </style>
 </head>
 <body>
@@ -201,7 +214,7 @@ function GameScreen({difficulty, companies, onStop, onTimeout}){
   const [stopDlg, setStopDlg]   = useState(false);
   const [showList, setShowList] = useState(false);
   const [timeLeft, setTimeLeft] = useState(300);
-  const [dobun, setDobun]       = useState(false);
+  const [dobunKey, setDobunKey] = useState(0); // 0=未発生、1以上=ドボン発生回数
   const [guesses, setGuesses]   = useState({}); // {code: {cho:string, oku:string}}
   const timerRef    = useRef(null);
   const selRef      = useRef([]);
@@ -234,9 +247,7 @@ function GameScreen({difficulty, companies, onStop, onTimeout}){
     setSelected(next); selRef.current=next;
     const total=next.reduce((s,x)=>s+x.cho,0);
     if(total>targetTri){
-      // ドボン演出を表示するがゲームは続行
-      setDobun(true);
-      setTimeout(()=>setDobun(false), 1500); // 1.5秒後に演出を消す
+      setDobunKey(k=>k+1); // キーを変えることでアニメーションを再トリガー
     }
   }
   function doStop(){ clearInterval(timerRef.current); onStopRef.current(selected, guessRef.current); }
@@ -291,9 +302,9 @@ function GameScreen({difficulty, companies, onStop, onTimeout}){
         <button onClick={()=>setStopDlg(true)} style={{background:"#E24B4A",color:"#fff",border:"none",fontSize:13,fontWeight:600,padding:"7px 22px",borderRadius:8,cursor:"pointer",fontFamily:"inherit"}}>STOP</button>
       </div>
 
-      {/* ドボン演出 */}
-      {dobun && (
-        <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:30}}>
+      {/* ドボン演出（CSSアニメーションで自動フェードアウト） */}
+      {dobunKey > 0 && (
+        <div key={dobunKey} className="dobun-overlay">
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:64}}>💥</div>
             <div style={{fontSize:44,fontWeight:700,color:"#E24B4A",marginTop:8}}>ドボン！</div>
