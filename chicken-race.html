@@ -203,14 +203,17 @@ function GameScreen({difficulty, companies, onStop, onTimeout}){
   const [timeLeft, setTimeLeft] = useState(300);
   const [dobun, setDobun]       = useState(false);
   const [guesses, setGuesses]   = useState({}); // {code: {cho:string, oku:string}}
-  const timerRef  = useRef(null);
-  const selRef    = useRef([]);
-  const guessRef  = useRef({});
+  const timerRef    = useRef(null);
+  const selRef      = useRef([]);
+  const guessRef    = useRef({});
+  const onStopRef   = useRef(onStop);
+  const onTimeoutRef= useRef(onTimeout);
+  useEffect(()=>{ onStopRef.current=onStop; onTimeoutRef.current=onTimeout; });
 
   useEffect(()=>{
     timerRef.current = setInterval(()=>{
       setTimeLeft(t=>{
-        if(t<=1){ clearInterval(timerRef.current); onTimeout(selRef.current, guessRef.current); return 0; }
+        if(t<=1){ clearInterval(timerRef.current); onTimeoutRef.current(selRef.current, guessRef.current); return 0; }
         return t-1;
       });
     },1000);
@@ -236,7 +239,7 @@ function GameScreen({difficulty, companies, onStop, onTimeout}){
       setTimeout(()=>setDobun(false), 1500); // 1.5秒後に演出を消す
     }
   }
-  function doStop(){ clearInterval(timerRef.current); onStop(selected, guessRef.current); }
+  function doStop(){ clearInterval(timerRef.current); onStopRef.current(selected, guessRef.current); }
 
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100dvh",position:"relative",background:"#f5f5f5",overflow:"hidden"}}>
@@ -527,6 +530,7 @@ function App(){
     setResult({selected, isDobun, guesses});
     setScreen("result");
   }
+
 
   if(allCompanies===null && loadError===null) return <LoadingScreen />;
   if(loadError) return <ErrorScreen message={loadError} onRetry={loadCSV} />;
