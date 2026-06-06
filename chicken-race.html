@@ -1035,6 +1035,9 @@ function App(){
     setMode("vs");
     setGameKey(k=>k+1); // companiesをリセット
 
+    // 認証済みUIDを確実に取得（uid stateがnullの場合に備えてauth.currentUserから直接取得）
+    const hostUid = (auth.currentUser && auth.currentUser.uid) ? auth.currentUser.uid : uid;
+
     const roomRef = db.ref(`rooms/${rid}`);
     roomRef.set({
       status: "waiting",
@@ -1043,7 +1046,7 @@ function App(){
       createdAt: firebase.database.ServerValue.TIMESTAMP,
       expiresAt: Date.now() + 2*60*60*1000,
       players: {
-        host: { uid, connected:true, stopped:false },
+        host: { uid: hostUid, connected:true, stopped:false },
         guest: { connected:false, stopped:false },
       }
     });
