@@ -38,14 +38,16 @@ body{background:#e8e8e8;display:flex;justify-content:center;font-family:'Sawarab
 // ★ここに自分のFirebaseプロジェクトの設定を貼り付ける★
 // ========================================
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  databaseURL: "YOUR_DATABASE_URL",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyBdxFdKaF_NVWxvWjZkbc7nRjpPfDUBKUQ",
+  authDomain: "chicken-race-d0006.firebaseapp.com",
+  databaseURL: "https://chicken-race-d0006-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "chicken-race-d0006",
+  storageBucket: "chicken-race-d0006.firebasestorage.app",
+  messagingSenderId: "328263408446",
+  appId: "1:328263408446:web:e99d7345f042a87755aa6f",
+  measurementId: "G-15DW6HDEQC"
 };
+
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db   = firebase.database();
