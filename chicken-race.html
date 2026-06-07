@@ -553,6 +553,35 @@ function RoomWaitScreen({roomId, role, difficulty, guestJoined, onStart, onLeave
 }
 
 // ========================================
+// 相手ターン中オーバーレイ（下スワイプで一時非表示）
+// ========================================
+function OppTurnOverlay({onHide}){
+  const startYRef = useRef(null);
+
+  function onTouchStart(e){ startYRef.current = e.touches[0].clientY; }
+  function onTouchEnd(e){
+    if(startYRef.current === null) return;
+    const diff = e.changedTouches[0].clientY - startYRef.current;
+    if(diff > 60) onHide(); // 60px以上下にスワイプで非表示
+    startYRef.current = null;
+  }
+
+  return (
+    <div
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:15}}
+    >
+      <div style={{background:"#fff",borderRadius:16,padding:"28px 24px",textAlign:"center",margin:"0 32px",maxWidth:280,width:"100%"}}>
+        <div style={{fontSize:15,fontWeight:600,color:"#434343",marginBottom:6}}>相手のターン</div>
+        <div style={{fontSize:13,color:"#aaa",marginBottom:16}}>少々お待ちください。</div>
+        <div style={{fontSize:11,color:"#ccc"}}>↓ 下にスワイプして銘柄を確認</div>
+      </div>
+    </div>
+  );
+}
+
+// ========================================
 // ゲーム画面（2人対戦・ターン制）
 // ========================================
 function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
@@ -722,8 +751,9 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
 
   function tapCell(c){
     if(allSelCodes.has(c.code)) return;
-    if(!isMyTurn){
-      // 相手ターン中はポップアップを表示するがボタンは選択不可
+    if(myStopped) return;
+    // 相手がSTOP済みならターンに関係なく選択可能
+    if(!oppStopped && !isMyTurn){
       setShowOppTurn(true);
       return;
     }
@@ -741,9 +771,11 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         mySelRef.current=next;
         setMySelected(next);
         setAllSelCodes(prev=>{ const n=new Set(prev); n.add(c.code); return n; });
-        // 選択したら即ターン交代
-        clearInterval(turnTimerRef.current);
-        advanceTurn();
+        // 相手がSTOP済みならターン交代しない（自由に選択し続ける）
+        if(!oppStopped){
+          clearInterval(turnTimerRef.current);
+          advanceTurn();
+        }
       }
     });
   }
@@ -842,14 +874,9 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       )}
 
-      {/* 相手ターン中ポップアップ（継続表示） */}
+      {/* 相手ターン中ポップアップ（下スワイプで一時非表示） */}
       {showOppTurn && !myStopped && (
-        <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:15}}>
-          <div style={{background:"#fff",borderRadius:16,padding:"28px 24px",textAlign:"center",margin:"0 32px",maxWidth:280,width:"100%"}}>
-            <div style={{fontSize:15,fontWeight:600,color:C,marginBottom:6}}>相手のターン</div>
-            <div style={{fontSize:13,color:"#aaa"}}>少々お待ちください。</div>
-          </div>
-        </div>
+        <OppTurnOverlay onHide={()=>setShowOppTurn(false)} />
       )}
 
       {/* 時間切れポップアップ */}
