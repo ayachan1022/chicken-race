@@ -655,6 +655,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
       if(!t) return;
       currentTurnRef.current = t;
       setCurrentTurn(t);
+      // STOP済みの場合は相手ターンポップアップを出さない
       setShowOppTurn(t !== role && !myStoppedRef.current);
     });
 
@@ -674,7 +675,27 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
     myConRef.set(true);
     myConRef.onDisconnect().set(false);
 
-    return ()=>{ oppSelRef.off(); oppStopRef.off(); oppConRef.off(); turnRef.off(); };
+    // ゲスト側：ホストがfinishedにしたら結果画面へ
+    const statusRef = roomRef.child("status");
+    if(role === "guest"){
+      statusRef.on("value", snap=>{
+        if(snap.val()==="finished"){
+          // 自分のonGameEndをまだ呼んでいない場合のみ
+          roomRef.once("value", roomSnap=>{
+            const data = roomSnap.val() || {};
+            const mySelections = Object.keys((data.players?.[role]?.selections)||{})
+              .map(code=>companies.find(c=>c.code===code)).filter(Boolean);
+            const oppSelections = Object.keys((data.players?.[oppRole]?.selections)||{})
+              .map(code=>companies.find(c=>c.code===code)).filter(Boolean);
+            onGameEnd(mySelRef.current.length > 0 ? mySelRef.current : mySelections,
+                      oppSelectedRef.current.length > 0 ? oppSelectedRef.current : oppSelections,
+                      guessRef.current, false);
+          });
+        }
+      });
+    }
+
+    return ()=>{ oppSelRef.off(); oppStopRef.off(); oppConRef.off(); turnRef.off(); if(role==="guest") statusRef.off(); };
   },[]);
 
   function handleTurnTimeUp(){
@@ -731,7 +752,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
   function doStop(){
     myStoppedRef.current = true;
     setMyStopped(true);
-    setShowOppTurn(false);
+    setShowOppTurn(false); // STOP後は相手ターンポップアップを消す
     clearInterval(turnTimerRef.current);
     roomRef.child(`players/${role}/stopped`).set(true);
     roomRef.child(`players/${role}/stoppedAt`).set(firebase.database.ServerValue.TIMESTAMP);
@@ -1073,6 +1094,7 @@ function App(){
         roomRef.child("players/guest/connected").set(true);
         roomRef.child("players/guest/connected").onDisconnect().set(false);
         // ゲームが開始されたらFirebaseから企業リストと難易度を読み込んでゲーム画面へ
+        // finishedになったら結果画面へ（ホストがhandleGameEndした場合に追従）
         roomRef.child("status").on("value", snap=>{
           if(snap.val()==="playing"){
             roomRef.once("value", roomSnap=>{
