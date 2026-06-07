@@ -690,7 +690,13 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
     oppStopRef.on("value", snap=>{
       if(snap.val()===true){
         setOppStopped(true);
-        if(!myStoppedRef.current){ setStopTimeLeft(120); }
+        if(!myStoppedRef.current){
+          // 自分はまだSTOPしていない→2分タイマー開始
+          setStopTimeLeft(120);
+        } else {
+          // 自分はすでにSTOP済み→即終了
+          handleGameEnd();
+        }
       }
     });
 
