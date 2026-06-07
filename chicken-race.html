@@ -554,7 +554,7 @@ function RoomWaitScreen({roomId, role, difficulty, guestJoined, onStart, onLeave
 }
 
 // ========================================
-// ゲーム画面（2人対戦）
+// ゲーム画面（2人対戦・ターン制）
 // ========================================
 function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
   const targetTri = TARGET[difficulty];
@@ -569,21 +569,66 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
   const [toastKey, setToastKey]         = useState(0);
   const [myStopped, setMyStopped]       = useState(false);
   const [oppStopped, setOppStopped]     = useState(false);
-  const [timeLeft, setTimeLeft]         = useState(null);
+  const [stopTimeLeft, setStopTimeLeft] = useState(null); // STOP後2分タイマー
   const [guesses, setGuesses]           = useState({});
   const [disconnected, setDisconnected] = useState(false);
 
-  const timerRef    = useRef(null);
-  const mySelRef    = useRef([]);
-  const guessRef    = useRef({});
-  const oppRole     = role==="host" ? "guest" : "host";
-  const roomRef     = db.ref(`rooms/${roomId}`);
+  // ターン制
+  const [currentTurn, setCurrentTurn]   = useState(null); // "host" | "guest"
+  const [turnTimeLeft, setTurnTimeLeft] = useState(60);   // 1分タイマー
+  const [showOppTurn, setShowOppTurn]   = useState(false); // 相手ターン中ポップアップ
+  const [showTimeUp, setShowTimeUp]     = useState(false); // 時間切れポップアップ
 
+  const stopTimerRef  = useRef(null);
+  const turnTimerRef  = useRef(null);
+  const mySelRef      = useRef([]);
+  const guessRef      = useRef({});
+  const currentTurnRef= useRef(null);
+  const myStoppedRef  = useRef(false);
+  const oppSelectedRef= useRef([]);
+  const oppRole       = role==="host" ? "guest" : "host";
+  const roomRef       = db.ref(`rooms/${roomId}`);
+  const isMyTurn      = currentTurn === role && !myStopped;
+
+  // ターンタイマー（1分）
+  useEffect(()=>{
+    if(currentTurn===null) return;
+    clearInterval(turnTimerRef.current);
+    setTurnTimeLeft(60);
+    // 自分のターンのみカウントダウン
+    if(currentTurn === role && !myStoppedRef.current){
+      turnTimerRef.current = setInterval(()=>{
+        setTurnTimeLeft(t=>{
+          if(t<=1){
+            clearInterval(turnTimerRef.current);
+            handleTurnTimeUp();
+            return 0;
+          }
+          return t-1;
+        });
+      }, 1000);
+    }
+    return ()=>clearInterval(turnTimerRef.current);
+  },[currentTurn]);
+
+  // STOP後2分タイマー
+  useEffect(()=>{
+    if(stopTimeLeft===null) return;
+    if(stopTimeLeft<=0){ handleGameEnd(); return; }
+    stopTimerRef.current = setTimeout(()=>setStopTimeLeft(t=>t-1), 1000);
+    return ()=>clearTimeout(stopTimerRef.current);
+  },[stopTimeLeft]);
+
+  useEffect(()=>{ if(disconnected){ setTimeout(()=>handleGameEnd(true), 1500); } },[disconnected]);
+
+  // Firebase購読
   useEffect(()=>{
     const oppSelRef  = roomRef.child(`players/${oppRole}/selections`);
     const oppStopRef = roomRef.child(`players/${oppRole}/stopped`);
     const oppConRef  = roomRef.child(`players/${oppRole}/connected`);
+    const turnRef    = roomRef.child("turn/current");
 
+    // 相手の選択を購読
     const prevOppCodes = new Set();
     oppSelRef.on("value", snap=>{
       const data = snap.val() || {};
@@ -599,44 +644,69 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         }
       });
       const oppList = codes.map(code=>companies.find(c=>c.code===code)).filter(Boolean);
+      oppSelectedRef.current = oppList;
       setOppSelected(oppList);
-      setAllSelCodes(prev=>{ const next = new Set(prev); codes.forEach(c=>next.add(c)); return next; });
+      setAllSelCodes(prev=>{ const next=new Set(prev); codes.forEach(c=>next.add(c)); return next; });
     });
 
+    // ターンを購読
+    turnRef.on("value", snap=>{
+      const t = snap.val();
+      if(!t) return;
+      currentTurnRef.current = t;
+      setCurrentTurn(t);
+      setShowOppTurn(t !== role && !myStoppedRef.current);
+    });
+
+    // 相手のSTOP購読
     oppStopRef.on("value", snap=>{
       if(snap.val()===true){
         setOppStopped(true);
-        setMyStopped(my=>{ if(!my){ setTimeLeft(120); } return my; });
+        if(!myStoppedRef.current){ setStopTimeLeft(120); }
       }
     });
 
+    // 切断検知
     oppConRef.on("value", snap=>{ if(snap.val()===false){ setDisconnected(true); } });
 
+    // 自分の接続登録
     const myConRef = roomRef.child(`players/${role}/connected`);
     myConRef.set(true);
     myConRef.onDisconnect().set(false);
 
-    return ()=>{ oppSelRef.off(); oppStopRef.off(); oppConRef.off(); };
+    return ()=>{ oppSelRef.off(); oppStopRef.off(); oppConRef.off(); turnRef.off(); };
   },[]);
 
-  useEffect(()=>{
-    if(timeLeft===null) return;
-    if(timeLeft<=0){ handleGameEnd(); return; }
-    timerRef.current = setTimeout(()=>setTimeLeft(t=>t-1), 1000);
-    return ()=>clearTimeout(timerRef.current);
-  },[timeLeft]);
+  function handleTurnTimeUp(){
+    // 時間切れ：ポップアップ表示してターン交代
+    setShowTimeUp(true);
+    setTimeout(()=>{
+      setShowTimeUp(false);
+      advanceTurn();
+    }, 2000);
+  }
 
-  useEffect(()=>{ if(disconnected){ setTimeout(()=>handleGameEnd(true), 1500); } },[disconnected]);
+  function advanceTurn(){
+    // Firebaseのターンを交代
+    const next = currentTurnRef.current === "host" ? "guest" : "host";
+    roomRef.child("turn/current").set(next);
+    roomRef.child("turn/startedAt").set(firebase.database.ServerValue.TIMESTAMP);
+  }
 
   function handleGameEnd(isDisconnect=false){
-    clearTimeout(timerRef.current);
+    clearInterval(turnTimerRef.current);
+    clearTimeout(stopTimerRef.current);
     roomRef.child("status").set("finished");
-    onGameEnd(mySelRef.current, oppSelected, guessRef.current, isDisconnect);
+    onGameEnd(mySelRef.current, oppSelectedRef.current, guessRef.current, isDisconnect);
   }
 
   function tapCell(c){
-    if(myStopped) return;
     if(allSelCodes.has(c.code)) return;
+    if(!isMyTurn){
+      // 相手ターン中はポップアップを表示するがボタンは選択不可
+      setShowOppTurn(true);
+      return;
+    }
     setPopup(c);
   }
 
@@ -651,38 +721,67 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         mySelRef.current=next;
         setMySelected(next);
         setAllSelCodes(prev=>{ const n=new Set(prev); n.add(c.code); return n; });
+        // 選択したら即ターン交代
+        clearInterval(turnTimerRef.current);
+        advanceTurn();
       }
     });
   }
 
   function doStop(){
+    myStoppedRef.current = true;
     setMyStopped(true);
+    setShowOppTurn(false);
+    clearInterval(turnTimerRef.current);
     roomRef.child(`players/${role}/stopped`).set(true);
     roomRef.child(`players/${role}/stoppedAt`).set(firebase.database.ServerValue.TIMESTAMP);
     if(oppStopped){ handleGameEnd(); }
+    // 相手がまだSTOPしていなければ相手に2分タイマーはFirebase購読で自動発生
   }
 
-  const mm = timeLeft!==null ? String(Math.floor(timeLeft/60)).padStart(2,"0") : "--";
-  const ss = timeLeft!==null ? String(timeLeft%60).padStart(2,"0") : "--";
+  const isMyTurnDisplay = currentTurn === role;
+  const turnMm = String(Math.floor(turnTimeLeft/60)).padStart(2,"0");
+  const turnSs = String(turnTimeLeft%60).padStart(2,"0");
+  const stopMm = stopTimeLeft!==null ? String(Math.floor(stopTimeLeft/60)).padStart(2,"0") : "--";
+  const stopSs = stopTimeLeft!==null ? String(stopTimeLeft%60).padStart(2,"0") : "--";
 
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100dvh",position:"relative",background:"#f5f5f5",overflow:"hidden"}}>
+
+      {/* ヘッダー */}
       <div style={{background:"#fff",borderBottom:"0.5px solid #e8e8e8",flexShrink:0}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px 0"}}>
           <span style={{fontSize:12,color:"#bbb"}}>{role==="host"?"ホスト":"ゲスト"}</span>
-          {timeLeft!==null && <span style={{fontSize:13,fontWeight:700,color:"#E24B4A"}}>残り {mm}:{ss}</span>}
+          <div style={{display:"flex",gap:10,alignItems:"center"}}>
+            {/* STOP後の2分タイマー */}
+            {stopTimeLeft!==null && !myStopped && (
+              <span style={{fontSize:13,fontWeight:700,color:"#E24B4A"}}>残り {stopMm}:{stopSs}</span>
+            )}
+            {myStopped && <span style={{fontSize:11,color:"#bbb"}}>STOP済</span>}
+            {oppStopped && <span style={{fontSize:11,color:"#E24B4A"}}>相手STOP済</span>}
+          </div>
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 14px 10px"}}>
           <span style={{fontSize:16,fontWeight:700,color:C,textDecoration:"underline",textUnderlineOffset:3}}>
             {TARGET[difficulty]}兆円に近づけろ！
           </span>
-          <div style={{display:"flex",gap:6}}>
-            {myStopped && <span style={{fontSize:11,color:"#bbb",alignSelf:"center"}}>STOP済</span>}
-            {oppStopped && <span style={{fontSize:11,color:"#E24B4A",alignSelf:"center"}}>相手STOP済</span>}
-          </div>
+          {/* ターンタイマー（自分のターン中のみ） */}
+          {!myStopped && currentTurn && (
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end"}}>
+              <span style={{fontSize:11,color:isMyTurnDisplay?"#4CAF50":"#bbb",fontWeight:600}}>
+                {isMyTurnDisplay?"あなたのターン":"相手のターン"}
+              </span>
+              {isMyTurnDisplay && (
+                <span style={{fontSize:13,fontWeight:700,color:turnTimeLeft<=10?"#E24B4A":C}}>
+                  {turnMm}:{turnSs}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
+      {/* 企業グリッド */}
       <div style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"10px 10px 0"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           {companies.map((c)=>{
@@ -708,6 +807,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         <div style={{height:10}}/>
       </div>
 
+      {/* 下部バー */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",borderTop:"0.5px solid #e8e8e8",background:"#fff",flexShrink:0,gap:6}}>
         <button onClick={()=>setShowMyList(true)} style={{flex:1,border:"1px solid #ccc",background:"#fff",color:C,fontSize:12,padding:"7px 4px",borderRadius:8,cursor:"pointer",fontFamily:"inherit"}}>自分のリスト</button>
         <button onClick={()=>setShowOppList(true)} style={{flex:1,border:"1px solid #E24B4A",background:"#fff",color:"#E24B4A",fontSize:12,padding:"7px 4px",borderRadius:8,cursor:"pointer",fontFamily:"inherit"}}>相手のリスト</button>
@@ -715,13 +815,35 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
           style={{flex:1,background:myStopped?"#ccc":"#E24B4A",color:"#fff",border:"none",fontSize:12,fontWeight:600,padding:"7px 4px",borderRadius:8,cursor:myStopped?"default":"pointer",fontFamily:"inherit"}}>STOP</button>
       </div>
 
+      {/* 相手選択トースト */}
       {toast && (
         <div key={toastKey} className="opponent-toast">
           相手は「{toast}」を選びました
         </div>
       )}
 
-      {popup && (
+      {/* 相手ターン中ポップアップ（継続表示） */}
+      {showOppTurn && !myStopped && (
+        <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:15}}>
+          <div style={{background:"#fff",borderRadius:16,padding:"28px 24px",textAlign:"center",margin:"0 32px",maxWidth:280,width:"100%"}}>
+            <div style={{fontSize:15,fontWeight:600,color:C,marginBottom:6}}>相手のターン</div>
+            <div style={{fontSize:13,color:"#aaa"}}>少々お待ちください。</div>
+          </div>
+        </div>
+      )}
+
+      {/* 時間切れポップアップ */}
+      {showTimeUp && (
+        <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:25}}>
+          <div style={{background:"#fff",borderRadius:16,padding:"28px 24px",textAlign:"center",margin:"0 32px",maxWidth:280,width:"100%"}}>
+            <div style={{fontSize:15,fontWeight:600,color:"#E24B4A",marginBottom:6}}>時間切れ</div>
+            <div style={{fontSize:13,color:"#aaa"}}>相手のターンになります</div>
+          </div>
+        </div>
+      )}
+
+      {/* 銘柄選択ポップアップ（自分のターン中のみ） */}
+      {popup && isMyTurn && (
         <div onClick={()=>setPopup(null)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:16,margin:"0 20px",padding:"22px",width:"100%",maxWidth:310}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
@@ -739,6 +861,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       )}
 
+      {/* STOPダイアログ */}
       {stopDlg && (
         <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:20}}>
           <div style={{background:"#fff",borderRadius:16,margin:"0 32px",padding:"24px",width:"100%",maxWidth:280}}>
@@ -752,6 +875,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       )}
 
+      {/* 自分のリスト */}
       {showMyList && (
         <div onClick={()=>setShowMyList(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",zIndex:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",width:"100%",borderRadius:"16px 16px 0 0",padding:"20px",maxHeight:"70vh",display:"flex",flexDirection:"column"}}>
@@ -788,6 +912,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       )}
 
+      {/* 相手のリスト */}
       {showOppList && (
         <div onClick={()=>setShowOppList(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",zIndex:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",width:"100%",borderRadius:"16px 16px 0 0",padding:"20px",maxHeight:"70vh",display:"flex",flexDirection:"column"}}>
@@ -808,6 +933,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       )}
 
+      {/* 切断通知 */}
       {disconnected && (
         <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:30}}>
           <div style={{background:"#fff",borderRadius:16,padding:"28px 24px",textAlign:"center",margin:"0 32px"}}>
@@ -1030,6 +1156,10 @@ function App(){
     const companiesObj = {};
     companies.forEach(c=>{ companiesObj[c.code]={name:c.name, oku:c.oku, cho:c.cho}; });
     roomRef.child("companies").set(companiesObj);
+    // 先後をランダムで決定
+    const firstTurn = Math.random() < 0.5 ? "host" : "guest";
+    roomRef.child("turn/current").set(firstTurn);
+    roomRef.child("turn/startedAt").set(firebase.database.ServerValue.TIMESTAMP);
     roomRef.child("status").set("playing");
     roomRef.child("timer/startedAt").set(firebase.database.ServerValue.TIMESTAMP);
     setScreen("vsgame");
