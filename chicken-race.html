@@ -595,7 +595,13 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
   const [showOppTurn, setShowOppTurn]   = useState(false); // 相手ターン中ポップアップ
   const [showTimeUp, setShowTimeUp]     = useState(false); // 時間切れポップアップ
 
-  const stopTimerRef  = useRef(null);
+  const oppTurnTimerRef = useRef(null);
+
+  function showOppTurnBriefly(){
+    setShowOppTurn(true);
+    clearTimeout(oppTurnTimerRef.current);
+    oppTurnTimerRef.current = setTimeout(()=>setShowOppTurn(false), 3000);
+  }
   const turnTimerRef  = useRef(null);
   const mySelRef      = useRef([]);
   const guessRef      = useRef({});
@@ -671,8 +677,12 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
       if(!t) return;
       currentTurnRef.current = t;
       setCurrentTurn(t);
-      // STOP済みの場合は相手ターンポップアップを出さない
-      setShowOppTurn(t !== role && !myStoppedRef.current);
+      // 相手のターンになったら3秒だけ表示して自動消去
+      if(t !== role && !myStoppedRef.current){
+        showOppTurnBriefly();
+      } else {
+        setShowOppTurn(false);
+      }
     });
 
     // 相手のSTOP購読
@@ -740,9 +750,8 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
   function tapCell(c){
     if(allSelCodes.has(c.code)) return;
     if(myStopped) return;
-    // 相手がSTOP済みならターンに関係なく選択可能
     if(!oppStopped && !isMyTurn){
-      setShowOppTurn(true);
+      showOppTurnBriefly();
       return;
     }
     setPopup(c);
@@ -1075,10 +1084,37 @@ function VsResultScreen({difficulty, mySelected, oppSelected, role, isDisconnect
 }
 
 // ========================================
+// カウントダウン画面（先行後攻発表）
+// ========================================
+function CountdownScreen({myTurn, onDone}){
+  const [count, setCount] = useState(3);
+  useEffect(()=>{
+    const timer = setInterval(()=>{
+      setCount(c=>{
+        if(c<=1){ clearInterval(timer); setTimeout(onDone, 800); return 0; }
+        return c-1;
+      });
+    }, 1000);
+    return ()=>clearInterval(timer);
+  },[]);
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100dvh",background:"#fff"}}>
+      <div style={{fontSize:14,color:"#bbb",marginBottom:24}}>
+        {myTurn ? "あなたが先行です！" : "相手が先行です"}
+      </div>
+      <div style={{fontSize:80,fontWeight:700,color:count===0?"#4CAF50":"#434343",lineHeight:1,transition:"color 0.2s"}}>
+        {count===0?"GO!":count}
+      </div>
+    </div>
+  );
+}
+
+// ========================================
 // App（画面管理）
 // ========================================
 function App(){
-  const [screen, setScreen]             = useState("top");
+  const [screen, setScreen]             = useState("loading"); // 最初はloading
   const [difficulty, setDiff]           = useState("normal");
   const [mode, setMode]                 = useState("solo");
   const [result, setResult]             = useState({selected:[],isDobun:false,guesses:{}});
@@ -1091,6 +1127,7 @@ function App(){
   const [role, setRole]                 = useState(null);
   const [uid, setUid]                   = useState(null);
   const [guestJoined, setGuestJoined]   = useState(false);
+  const [firstTurn, setFirstTurn]       = useState(null); // カウントダウン用
 
   useEffect(()=>{ loadCSV(); },[]);
 
@@ -1107,38 +1144,40 @@ function App(){
         roomRef.child("players/guest/uid").set(cred.user.uid);
         roomRef.child("players/guest/connected").set(true);
         roomRef.child("players/guest/connected").onDisconnect().set(false);
-        // ゲームが開始されたらFirebaseから企業リストと難易度を読み込んでゲーム画面へ
-        // finishedになったら結果画面へ（ホストがhandleGameEndした場合に追従）
         roomRef.child("status").on("value", snap=>{
           if(snap.val()==="playing"){
             roomRef.once("value", roomSnap=>{
               const roomData = roomSnap.val() || {};
               const diff = roomData.difficulty || "normal";
               setDiff(diff);
-              // Firebaseの企業リストをゲストにも適用
               const companiesObj = roomData.companies || {};
               const companiesList = Object.entries(companiesObj)
                 .map(([code, v])=>({ code, name:v.name, oku:v.oku, cho:v.cho, rankCD:0 }))
                 .sort((a,b)=>a.code.localeCompare(b.code, undefined, {numeric:true}));
               setCompanies(companiesList);
-              setScreen("vsgame");
+              // turn/currentを取得してカウントダウン画面へ
+              const ft = roomData.turn?.current || "host";
+              setFirstTurn(ft);
+              setScreen("countdown");
             });
           }
         });
         setScreen("guestwait");
       });
     } else {
-      auth.signInAnonymously().then(cred=>setUid(cred.user.uid));
+      auth.signInAnonymously().then(cred=>{
+        setUid(cred.user.uid);
+        setScreen("top"); // 認証完了後にトップ画面へ
+      });
     }
   },[]);
 
   useEffect(()=>{
-    if(allCompanies) setCompanies(selectCompanies(allCompanies));
+    if(allCompanies && mode==="solo") setCompanies(selectCompanies(allCompanies));
   },[gameKey, allCompanies]);
 
   function loadCSV(){
     setLoadError(null);
-    setAllCompanies(null);
     fetch(CSV_PATH)
       .then(res=>{ if(!res.ok) throw new Error(`HTTPエラー ${res.status}`); return res.text(); })
       .then(text=>{
@@ -1165,7 +1204,6 @@ function App(){
     setGameKey(k=>k+1);
 
     const hostUid = (auth.currentUser && auth.currentUser.uid) ? auth.currentUser.uid : uid;
-
     const roomRef = db.ref(`rooms/${rid}`);
     roomRef.set({
       status: "waiting",
@@ -1179,11 +1217,9 @@ function App(){
       }
     });
     roomRef.child("players/host/connected").onDisconnect().set(false);
-
     roomRef.child("players/guest/connected").on("value", snap=>{
       if(snap.val()===true) setGuestJoined(true);
     });
-
     setScreen("roomwait");
   }
 
@@ -1192,13 +1228,58 @@ function App(){
     const companiesObj = {};
     companies.forEach(c=>{ companiesObj[c.code]={name:c.name, oku:c.oku, cho:c.cho}; });
     roomRef.child("companies").set(companiesObj);
-    // 先後をランダムで決定
-    const firstTurn = Math.random() < 0.5 ? "host" : "guest";
-    roomRef.child("turn/current").set(firstTurn);
+    const ft = Math.random() < 0.5 ? "host" : "guest";
+    setFirstTurn(ft);
+    roomRef.child("turn/current").set(ft);
     roomRef.child("turn/startedAt").set(firebase.database.ServerValue.TIMESTAMP);
     roomRef.child("status").set("playing");
     roomRef.child("timer/startedAt").set(firebase.database.ServerValue.TIMESTAMP);
-    setScreen("vsgame");
+    setScreen("countdown"); // カウントダウン画面へ
+  }
+
+  // 再戦：Firebaseのゲームデータをリセットして同じルームで再戦
+  function retryVsGame(){
+    const roomRef = db.ref(`rooms/${roomId}`);
+    const newCompanies = selectCompanies(allCompanies);
+    setCompanies(newCompanies);
+    setGameKey(k=>k+1);
+
+    if(role==="host"){
+      const companiesObj = {};
+      newCompanies.forEach(c=>{ companiesObj[c.code]={name:c.name, oku:c.oku, cho:c.cho}; });
+      const ft = Math.random() < 0.5 ? "host" : "guest";
+      setFirstTurn(ft);
+      roomRef.update({
+        status: "playing",
+        companies: companiesObj,
+        "turn/current": ft,
+        "turn/startedAt": firebase.database.ServerValue.TIMESTAMP,
+        "players/host/stopped": false,
+        "players/host/selections": null,
+        "players/guest/stopped": false,
+        "players/guest/selections": null,
+        "timer/startedAt": firebase.database.ServerValue.TIMESTAMP,
+      });
+      setScreen("countdown");
+    } else {
+      // ゲストはホストのリセットを待つ
+      setScreen("guestwait");
+      roomRef.child("status").on("value", snap=>{
+        if(snap.val()==="playing"){
+          roomRef.once("value", roomSnap=>{
+            const roomData = roomSnap.val() || {};
+            const companiesObj = roomData.companies || {};
+            const companiesList = Object.entries(companiesObj)
+              .map(([code, v])=>({ code, name:v.name, oku:v.oku, cho:v.cho, rankCD:0 }))
+              .sort((a,b)=>a.code.localeCompare(b.code, undefined, {numeric:true}));
+            setCompanies(companiesList);
+            const ft = roomData.turn?.current || "host";
+            setFirstTurn(ft);
+            setScreen("countdown");
+          });
+        }
+      });
+    }
   }
 
   function goVsResult(mySelected, oppSelected, guesses, isDisconnect){
@@ -1206,14 +1287,14 @@ function App(){
     setScreen("vsresult");
   }
 
-  if(allCompanies===null && loadError===null) return <LoadingScreen />;
+  if(screen==="loading" || (allCompanies===null && loadError===null)) return <LoadingScreen />;
   if(loadError) return <ErrorScreen message={loadError} onRetry={loadCSV} />;
 
   return (
     <>
       {screen==="top" && (
         <TopScreen
-          onSolo={()=>{ setMode("solo"); setScreen("difficulty"); }}
+          onSolo={()=>{ setMode("solo"); setCompanies(selectCompanies(allCompanies)); setScreen("difficulty"); }}
           onVs={()=>{ setMode("vs"); setScreen("difficulty"); }}
         />
       )}
@@ -1221,7 +1302,7 @@ function App(){
         <DifficultyScreen
           onBack={()=>setScreen("top")}
           onDecide={d=>{
-            if(mode==="solo"){ setDiff(d); setGameKey(k=>k+1); setScreen("game"); }
+            if(mode==="solo"){ setDiff(d); setCompanies(selectCompanies(allCompanies)); setScreen("game"); }
             else { createRoom(d); }
           }}
         />
@@ -1246,6 +1327,12 @@ function App(){
           onLeave={()=>{ setScreen("top"); setRoomId(null); setRole(null); setGuestJoined(false); }}
         />
       )}
+      {screen==="countdown" && (
+        <CountdownScreen
+          myTurn={firstTurn===role}
+          onDone={()=>setScreen("vsgame")}
+        />
+      )}
       {screen==="vsgame" && (
         <VsGameScreen
           key={gameKey} difficulty={difficulty} companies={companies}
@@ -1258,7 +1345,7 @@ function App(){
           difficulty={difficulty}
           mySelected={vsResult.mySelected} oppSelected={vsResult.oppSelected}
           role={role} isDisconnect={vsResult.isDisconnect}
-          onRetry={()=>{ setGameKey(k=>k+1); setScreen("roomwait"); }}
+          onRetry={retryVsGame}
           onTop={()=>{ setScreen("top"); setRoomId(null); setRole(null); setGuestJoined(false); }}
         />
       )}
