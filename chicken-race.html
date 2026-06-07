@@ -596,6 +596,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
   const [showTimeUp, setShowTimeUp]     = useState(false); // 時間切れポップアップ
 
   const oppTurnTimerRef = useRef(null);
+  const stopTimerRef    = useRef(null);
 
   function showOppTurnBriefly(){
     setShowOppTurn(true);
