@@ -694,7 +694,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
           // 自分はまだSTOPしていない→2分タイマー開始
           setStopTimeLeft(120);
         } else {
-          // 自分はすでにSTOP済み→即終了
+          // 自分はすでにSTOP済み→即終了（ホスト・ゲスト両方）
           handleGameEnd();
         }
       }
@@ -710,12 +710,11 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
 
     // ゲスト側：ホストがfinishedにしたら結果画面へ
     const statusRef = roomRef.child("status");
-    const gameEndedRef = { current: false }; // 二重呼び出し防止
     if(role === "guest"){
       statusRef.on("value", snap=>{
         if(snap.val()==="finished" && !gameEndedRef.current){
           gameEndedRef.current = true;
-          statusRef.off(); // 購読を即解除
+          statusRef.off();
           roomRef.once("value", roomSnap=>{
             const data = roomSnap.val() || {};
             const mySelections = Object.keys((data.players?.[role]?.selections)||{})
@@ -754,11 +753,14 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
   const gameEndedRef = useRef(false);
 
   function handleGameEnd(isDisconnect=false){
-    if(gameEndedRef.current) return; // 二重呼び出し防止
+    if(gameEndedRef.current) return;
     gameEndedRef.current = true;
     clearInterval(turnTimerRef.current);
     clearTimeout(stopTimerRef.current);
-    roomRef.child("status").set("finished");
+    // statusのsetはホストのみ行う（競合防止）
+    if(role === "host"){
+      roomRef.child("status").set("finished");
+    }
     onGameEnd(mySelRef.current, oppSelectedRef.current, guessRef.current, isDisconnect);
   }
 
