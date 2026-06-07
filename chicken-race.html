@@ -703,19 +703,23 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
 
     // ゲスト側：ホストがfinishedにしたら結果画面へ
     const statusRef = roomRef.child("status");
+    const gameEndedRef = { current: false }; // 二重呼び出し防止
     if(role === "guest"){
       statusRef.on("value", snap=>{
-        if(snap.val()==="finished"){
-          // 自分のonGameEndをまだ呼んでいない場合のみ
+        if(snap.val()==="finished" && !gameEndedRef.current){
+          gameEndedRef.current = true;
+          statusRef.off(); // 購読を即解除
           roomRef.once("value", roomSnap=>{
             const data = roomSnap.val() || {};
             const mySelections = Object.keys((data.players?.[role]?.selections)||{})
               .map(code=>companies.find(c=>c.code===code)).filter(Boolean);
             const oppSelections = Object.keys((data.players?.[oppRole]?.selections)||{})
               .map(code=>companies.find(c=>c.code===code)).filter(Boolean);
-            onGameEnd(mySelRef.current.length > 0 ? mySelRef.current : mySelections,
-                      oppSelectedRef.current.length > 0 ? oppSelectedRef.current : oppSelections,
-                      guessRef.current, false);
+            onGameEnd(
+              mySelRef.current.length > 0 ? mySelRef.current : mySelections,
+              oppSelectedRef.current.length > 0 ? oppSelectedRef.current : oppSelections,
+              guessRef.current, false
+            );
           });
         }
       });
@@ -740,7 +744,11 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
     roomRef.child("turn/startedAt").set(firebase.database.ServerValue.TIMESTAMP);
   }
 
+  const gameEndedRef = useRef(false);
+
   function handleGameEnd(isDisconnect=false){
+    if(gameEndedRef.current) return; // 二重呼び出し防止
+    gameEndedRef.current = true;
     clearInterval(turnTimerRef.current);
     clearTimeout(stopTimerRef.current);
     roomRef.child("status").set("finished");
