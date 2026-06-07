@@ -553,29 +553,17 @@ function RoomWaitScreen({roomId, role, difficulty, guestJoined, onStart, onLeave
 }
 
 // ========================================
-// 相手ターン中オーバーレイ（下スワイプで一時非表示）
+// 相手ターン中オーバーレイ（ボタンで一時非表示）
 // ========================================
 function OppTurnOverlay({onHide}){
-  const startYRef = useRef(null);
-
-  function onTouchStart(e){ startYRef.current = e.touches[0].clientY; }
-  function onTouchEnd(e){
-    if(startYRef.current === null) return;
-    const diff = e.changedTouches[0].clientY - startYRef.current;
-    if(diff > 60) onHide(); // 60px以上下にスワイプで非表示
-    startYRef.current = null;
-  }
-
   return (
-    <div
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
-      style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:15}}
-    >
+    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:15}}>
       <div style={{background:"#fff",borderRadius:16,padding:"28px 24px",textAlign:"center",margin:"0 32px",maxWidth:280,width:"100%"}}>
         <div style={{fontSize:15,fontWeight:600,color:"#434343",marginBottom:6}}>相手のターン</div>
-        <div style={{fontSize:13,color:"#aaa",marginBottom:16}}>少々お待ちください。</div>
-        <div style={{fontSize:11,color:"#ccc"}}>↓ 下にスワイプして銘柄を確認</div>
+        <div style={{fontSize:13,color:"#aaa",marginBottom:20}}>少々お待ちください。</div>
+        <button onClick={onHide} style={{background:"#f5f5f5",border:"none",borderRadius:10,padding:"10px 20px",fontSize:13,color:"#434343",cursor:"pointer",fontFamily:"inherit"}}>
+          銘柄を確認する
+        </button>
       </div>
     </div>
   );
@@ -889,8 +877,8 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       )}
 
-      {/* 銘柄選択ポップアップ（自分のターン中のみ） */}
-      {popup && isMyTurn && (
+      {/* 銘柄選択ポップアップ（自分のターン中、または相手STOP後） */}
+      {popup && (isMyTurn || oppStopped) && (
         <div onClick={()=>setPopup(null)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:16,margin:"0 20px",padding:"22px",width:"100%",maxWidth:310}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
