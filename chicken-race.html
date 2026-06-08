@@ -34,10 +34,6 @@ body{background:#e8e8e8;display:flex;justify-content:center;font-family:'Sawarab
 <body>
 <div id="root"></div>
 <script>
-// ========================================
-// Firebase 設定
-// ★ここに自分のFirebaseプロジェクトの設定を貼り付ける★
-// ========================================
 const firebaseConfig = {
   apiKey: "AIzaSyBdxFdKaF_NVWxvWjZkbc7nRjpPfDUBKUQ",
   authDomain: "chicken-race-d0006.firebaseapp.com",
@@ -465,9 +461,7 @@ function ResultScreen({difficulty, selected, isDobun, guesses, onRetry, onTop}){
 }
 
 // ========================================
-// ルーム作成・待機画面
-// ========================================
-// ゲスト待機画面（URL踏んだ直後に表示）
+// ゲスト待機画面
 // ========================================
 function GuestWaitScreen(){
   return (
@@ -479,6 +473,8 @@ function GuestWaitScreen(){
   );
 }
 
+// ========================================
+// ルーム作成・待機画面
 // ========================================
 function RoomWaitScreen({roomId, role, difficulty, guestJoined, onStart, onLeave}){
   const url = `${location.origin}${location.pathname}?room=${roomId}`;
@@ -553,7 +549,7 @@ function RoomWaitScreen({roomId, role, difficulty, guestJoined, onStart, onLeave
 }
 
 // ========================================
-// 相手ターン中オーバーレイ（ボタンで一時非表示）
+// 相手ターン中オーバーレイ
 // ========================================
 function OppTurnOverlay({onHide}){
   return (
@@ -572,7 +568,7 @@ function OppTurnOverlay({onHide}){
 // ========================================
 // ゲーム画面（2人対戦・ターン制）
 // ========================================
-function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
+function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRetry}){
   const targetTri = TARGET[difficulty];
   const [mySelected, setMySelected]     = useState([]);
   const [oppSelected, setOppSelected]   = useState([]);
@@ -585,40 +581,39 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
   const [toastKey, setToastKey]         = useState(0);
   const [myStopped, setMyStopped]       = useState(false);
   const [oppStopped, setOppStopped]     = useState(false);
-  const [stopTimeLeft, setStopTimeLeft] = useState(null); // STOP後2分タイマー
+  const [stopTimeLeft, setStopTimeLeft] = useState(null);
   const [guesses, setGuesses]           = useState({});
   const [disconnected, setDisconnected] = useState(false);
 
-  // ターン制
-  const [currentTurn, setCurrentTurn]   = useState(null); // "host" | "guest"
-  const [turnTimeLeft, setTurnTimeLeft] = useState(60);   // 1分タイマー
-  const [showOppTurn, setShowOppTurn]   = useState(false); // 相手ターン中ポップアップ
-  const [showTimeUp, setShowTimeUp]     = useState(false); // 時間切れポップアップ
+  const [currentTurn, setCurrentTurn]   = useState(null);
+  const [turnTimeLeft, setTurnTimeLeft] = useState(60);
+  const [showOppTurn, setShowOppTurn]   = useState(false);
+  const [showTimeUp, setShowTimeUp]     = useState(false);
 
   const oppTurnTimerRef = useRef(null);
   const stopTimerRef    = useRef(null);
+  const turnTimerRef    = useRef(null);
+  const mySelRef        = useRef([]);
+  const guessRef        = useRef({});
+  const currentTurnRef  = useRef(null);
+  const myStoppedRef    = useRef(false);
+  const oppSelectedRef  = useRef([]);
+  const gameEndedRef    = useRef(false);
+  const oppRole         = role==="host" ? "guest" : "host";
+  const roomRef         = db.ref(`rooms/${roomId}`);
+  const isMyTurn        = currentTurn === role && !myStopped;
 
   function showOppTurnBriefly(){
     setShowOppTurn(true);
     clearTimeout(oppTurnTimerRef.current);
     oppTurnTimerRef.current = setTimeout(()=>setShowOppTurn(false), 3000);
   }
-  const turnTimerRef  = useRef(null);
-  const mySelRef      = useRef([]);
-  const guessRef      = useRef({});
-  const currentTurnRef= useRef(null);
-  const myStoppedRef  = useRef(false);
-  const oppSelectedRef= useRef([]);
-  const oppRole       = role==="host" ? "guest" : "host";
-  const roomRef       = db.ref(`rooms/${roomId}`);
-  const isMyTurn      = currentTurn === role && !myStopped;
 
   // ターンタイマー（1分）
   useEffect(()=>{
     if(currentTurn===null) return;
     clearInterval(turnTimerRef.current);
     setTurnTimeLeft(60);
-    // 自分のターンのみカウントダウン
     if(currentTurn === role && !myStoppedRef.current){
       turnTimerRef.current = setInterval(()=>{
         setTurnTimeLeft(t=>{
@@ -650,6 +645,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
     const oppStopRef = roomRef.child(`players/${oppRole}/stopped`);
     const oppConRef  = roomRef.child(`players/${oppRole}/connected`);
     const turnRef    = roomRef.child("turn/current");
+    const statusRef  = roomRef.child("status");
 
     // 相手の選択を購読
     const prevOppCodes = new Set();
@@ -678,7 +674,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
       if(!t) return;
       currentTurnRef.current = t;
       setCurrentTurn(t);
-      // 相手のターンになったら3秒だけ表示して自動消去
       if(t !== role && !myStoppedRef.current){
         showOppTurnBriefly();
       } else {
@@ -691,10 +686,8 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
       if(snap.val()===true){
         setOppStopped(true);
         if(!myStoppedRef.current){
-          // 自分はまだSTOPしていない→2分タイマー開始
           setStopTimeLeft(120);
         } else {
-          // 自分はすでにSTOP済み→即終了（ホスト・ゲスト両方）
           handleGameEnd();
         }
       }
@@ -708,34 +701,50 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
     myConRef.set(true);
     myConRef.onDisconnect().set(false);
 
-    // ゲスト側：ホストがfinishedにしたら結果画面へ
-    const statusRef = roomRef.child("status");
-    if(role === "guest"){
-      statusRef.on("value", snap=>{
-        if(snap.val()==="finished" && !gameEndedRef.current){
-          gameEndedRef.current = true;
-          statusRef.off();
-          roomRef.once("value", roomSnap=>{
-            const data = roomSnap.val() || {};
-            const mySelections = Object.keys((data.players?.[role]?.selections)||{})
-              .map(code=>companies.find(c=>c.code===code)).filter(Boolean);
-            const oppSelections = Object.keys((data.players?.[oppRole]?.selections)||{})
-              .map(code=>companies.find(c=>c.code===code)).filter(Boolean);
-            onGameEnd(
-              mySelRef.current.length > 0 ? mySelRef.current : mySelections,
-              oppSelectedRef.current.length > 0 ? oppSelectedRef.current : oppSelections,
-              guessRef.current, false
-            );
-          });
-        }
-      });
-    }
+    // ── 修正③：status 購読を一本化 ──
+    // "waiting" → 再戦リクエスト（どちらかが「もう一度」を押した）→ onRetry へ
+    // "finished" → ゲスト側の結果画面遷移
+    statusRef.on("value", snap=>{
+      const s = snap.val();
+      if(s === "waiting" && !gameEndedRef.current){
+        gameEndedRef.current = true;
+        cleanup();
+        onRetry();
+        return;
+      }
+      if(role === "guest" && s === "finished" && !gameEndedRef.current){
+        gameEndedRef.current = true;
+        cleanup();
+        roomRef.once("value", roomSnap=>{
+          const data = roomSnap.val() || {};
+          const mySelections = Object.keys((data.players?.[role]?.selections)||{})
+            .map(code=>companies.find(c=>c.code===code)).filter(Boolean);
+          const oppSelections = Object.keys((data.players?.[oppRole]?.selections)||{})
+            .map(code=>companies.find(c=>c.code===code)).filter(Boolean);
+          onGameEnd(
+            mySelRef.current.length > 0 ? mySelRef.current : mySelections,
+            oppSelectedRef.current.length > 0 ? oppSelectedRef.current : oppSelections,
+            guessRef.current, false
+          );
+        });
+      }
+    });
 
-    return ()=>{ oppSelRef.off(); oppStopRef.off(); oppConRef.off(); turnRef.off(); if(role==="guest") statusRef.off(); };
+    return ()=>cleanup();
   },[]);
 
+  function cleanup(){
+    roomRef.child(`players/${oppRole}/selections`).off();
+    roomRef.child(`players/${oppRole}/stopped`).off();
+    roomRef.child(`players/${oppRole}/connected`).off();
+    roomRef.child("turn/current").off();
+    roomRef.child("status").off();
+    clearInterval(turnTimerRef.current);
+    clearTimeout(stopTimerRef.current);
+    clearTimeout(oppTurnTimerRef.current);
+  }
+
   function handleTurnTimeUp(){
-    // 時間切れ：ポップアップ表示してターン交代
     setShowTimeUp(true);
     setTimeout(()=>{
       setShowTimeUp(false);
@@ -744,20 +753,15 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
   }
 
   function advanceTurn(){
-    // Firebaseのターンを交代
     const next = currentTurnRef.current === "host" ? "guest" : "host";
     roomRef.child("turn/current").set(next);
     roomRef.child("turn/startedAt").set(firebase.database.ServerValue.TIMESTAMP);
   }
 
-  const gameEndedRef = useRef(false);
-
   function handleGameEnd(isDisconnect=false){
     if(gameEndedRef.current) return;
     gameEndedRef.current = true;
-    clearInterval(turnTimerRef.current);
-    clearTimeout(stopTimerRef.current);
-    // statusのsetはホストのみ行う（競合防止）
+    cleanup();
     if(role === "host"){
       roomRef.child("status").set("finished");
     }
@@ -785,7 +789,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         mySelRef.current=next;
         setMySelected(next);
         setAllSelCodes(prev=>{ const n=new Set(prev); n.add(c.code); return n; });
-        // 相手がSTOP済みならターン交代しない（自由に選択し続ける）
         if(!oppStopped){
           clearInterval(turnTimerRef.current);
           advanceTurn();
@@ -797,12 +800,11 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
   function doStop(){
     myStoppedRef.current = true;
     setMyStopped(true);
-    setShowOppTurn(false); // STOP後は相手ターンポップアップを消す
+    setShowOppTurn(false);
     clearInterval(turnTimerRef.current);
     roomRef.child(`players/${role}/stopped`).set(true);
     roomRef.child(`players/${role}/stoppedAt`).set(firebase.database.ServerValue.TIMESTAMP);
     if(oppStopped){ handleGameEnd(); }
-    // 相手がまだSTOPしていなければ相手に2分タイマーはFirebase購読で自動発生
   }
 
   const isMyTurnDisplay = currentTurn === role;
@@ -814,12 +816,10 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100dvh",position:"relative",background:"#f5f5f5",overflow:"hidden"}}>
 
-      {/* ヘッダー */}
       <div style={{background:"#fff",borderBottom:"0.5px solid #e8e8e8",flexShrink:0}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px 0"}}>
           <span style={{fontSize:12,color:"#bbb"}}>{role==="host"?"ホスト":"ゲスト"}</span>
           <div style={{display:"flex",gap:10,alignItems:"center"}}>
-            {/* STOP後の2分タイマー */}
             {stopTimeLeft!==null && !myStopped && (
               <span style={{fontSize:13,fontWeight:700,color:"#E24B4A"}}>残り {stopMm}:{stopSs}</span>
             )}
@@ -831,7 +831,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
           <span style={{fontSize:16,fontWeight:700,color:C,textDecoration:"underline",textUnderlineOffset:3}}>
             {TARGET[difficulty]}兆円に近づけろ！
           </span>
-          {/* ターンタイマー（自分のターン中のみ） */}
           {!myStopped && currentTurn && (
             <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end"}}>
               <span style={{fontSize:11,color:isMyTurnDisplay?"#4CAF50":"#bbb",fontWeight:600}}>
@@ -847,7 +846,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       </div>
 
-      {/* 企業グリッド */}
       <div style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"10px 10px 0"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           {companies.map((c)=>{
@@ -873,7 +871,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         <div style={{height:10}}/>
       </div>
 
-      {/* 下部バー */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",borderTop:"0.5px solid #e8e8e8",background:"#fff",flexShrink:0,gap:6}}>
         <button onClick={()=>setShowMyList(true)} style={{flex:1,border:"1px solid #ccc",background:"#fff",color:C,fontSize:12,padding:"7px 4px",borderRadius:8,cursor:"pointer",fontFamily:"inherit"}}>自分のリスト</button>
         <button onClick={()=>setShowOppList(true)} style={{flex:1,border:"1px solid #E24B4A",background:"#fff",color:"#E24B4A",fontSize:12,padding:"7px 4px",borderRadius:8,cursor:"pointer",fontFamily:"inherit"}}>相手のリスト</button>
@@ -881,19 +878,16 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
           style={{flex:1,background:myStopped?"#ccc":"#E24B4A",color:"#fff",border:"none",fontSize:12,fontWeight:600,padding:"7px 4px",borderRadius:8,cursor:myStopped?"default":"pointer",fontFamily:"inherit"}}>STOP</button>
       </div>
 
-      {/* 相手選択トースト */}
       {toast && (
         <div key={toastKey} className="opponent-toast">
           相手は「{toast}」を選びました
         </div>
       )}
 
-      {/* 相手ターン中ポップアップ（下スワイプで一時非表示） */}
       {showOppTurn && !myStopped && (
         <OppTurnOverlay onHide={()=>setShowOppTurn(false)} />
       )}
 
-      {/* 時間切れポップアップ */}
       {showTimeUp && (
         <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:25}}>
           <div style={{background:"#fff",borderRadius:16,padding:"28px 24px",textAlign:"center",margin:"0 32px",maxWidth:280,width:"100%"}}>
@@ -903,7 +897,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       )}
 
-      {/* 銘柄選択ポップアップ（自分のターン中、または相手STOP後） */}
       {popup && (isMyTurn || oppStopped) && (
         <div onClick={()=>setPopup(null)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:16,margin:"0 20px",padding:"22px",width:"100%",maxWidth:310}}>
@@ -922,7 +915,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       )}
 
-      {/* STOPダイアログ */}
       {stopDlg && (
         <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:20}}>
           <div style={{background:"#fff",borderRadius:16,margin:"0 32px",padding:"24px",width:"100%",maxWidth:280}}>
@@ -936,7 +928,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       )}
 
-      {/* 自分のリスト */}
       {showMyList && (
         <div onClick={()=>setShowMyList(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",zIndex:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",width:"100%",borderRadius:"16px 16px 0 0",padding:"20px",maxHeight:"70vh",display:"flex",flexDirection:"column"}}>
@@ -973,7 +964,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       )}
 
-      {/* 相手のリスト */}
       {showOppList && (
         <div onClick={()=>setShowOppList(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",zIndex:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",width:"100%",borderRadius:"16px 16px 0 0",padding:"20px",maxHeight:"70vh",display:"flex",flexDirection:"column"}}>
@@ -994,7 +984,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd}){
         </div>
       )}
 
-      {/* 切断通知 */}
       {disconnected && (
         <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:30}}>
           <div style={{background:"#fff",borderRadius:16,padding:"28px 24px",textAlign:"center",margin:"0 32px"}}>
@@ -1131,7 +1120,7 @@ function CountdownScreen({myTurn, onDone}){
 // App（画面管理）
 // ========================================
 function App(){
-  const [screen, setScreen]             = useState("loading"); // 最初はloading
+  const [screen, setScreen]             = useState("loading");
   const [difficulty, setDiff]           = useState("normal");
   const [mode, setMode]                 = useState("solo");
   const [result, setResult]             = useState({selected:[],isDobun:false,guesses:{}});
@@ -1144,7 +1133,7 @@ function App(){
   const [role, setRole]                 = useState(null);
   const [uid, setUid]                   = useState(null);
   const [guestJoined, setGuestJoined]   = useState(false);
-  const [firstTurn, setFirstTurn]       = useState(null); // カウントダウン用
+  const [firstTurn, setFirstTurn]       = useState(null);
 
   useEffect(()=>{ loadCSV(); },[]);
 
@@ -1172,7 +1161,6 @@ function App(){
                 .map(([code, v])=>({ code, name:v.name, oku:v.oku, cho:v.cho, rankCD:0 }))
                 .sort((a,b)=>a.code.localeCompare(b.code, undefined, {numeric:true}));
               setCompanies(companiesList);
-              // turn/currentを取得してカウントダウン画面へ
               const ft = roomData.turn?.current || "host";
               setFirstTurn(ft);
               setScreen("countdown");
@@ -1184,14 +1172,10 @@ function App(){
     } else {
       auth.signInAnonymously().then(cred=>{
         setUid(cred.user.uid);
-        setScreen("top"); // 認証完了後にトップ画面へ
+        setScreen("top");
       });
     }
   },[]);
-
-  useEffect(()=>{
-    if(allCompanies && mode==="solo") setCompanies(selectCompanies(allCompanies));
-  },[gameKey, allCompanies]);
 
   function loadCSV(){
     setLoadError(null);
@@ -1212,13 +1196,38 @@ function App(){
     setScreen("result");
   }
 
+  // ── 修正①：startVsGame でその都度企業を抽出・Firebase に保存 ──
+  // 初回もリトライ時もここを通るので企業リストは常に新規抽出
+  function startVsGame(){
+    const newCompanies = selectCompanies(allCompanies);
+    setCompanies(newCompanies);
+    setGameKey(k=>k+1);
+
+    const roomRef = db.ref(`rooms/${roomId}`);
+    const companiesObj = {};
+    newCompanies.forEach(c=>{ companiesObj[c.code]={name:c.name, oku:c.oku, cho:c.cho}; });
+    const ft = Math.random() < 0.5 ? "host" : "guest";
+    setFirstTurn(ft);
+    roomRef.update({
+      status: "playing",
+      companies: companiesObj,
+      "turn/current": ft,
+      "turn/startedAt": firebase.database.ServerValue.TIMESTAMP,
+      "players/host/stopped": false,
+      "players/host/selections": null,
+      "players/guest/stopped": false,
+      "players/guest/selections": null,
+      "timer/startedAt": firebase.database.ServerValue.TIMESTAMP,
+    });
+    setScreen("countdown");
+  }
+
   function createRoom(diff){
     setDiff(diff);
     const rid = generateRoomId();
     setRoomId(rid);
     setRole("host");
     setMode("vs");
-    setGameKey(k=>k+1);
 
     const hostUid = (auth.currentUser && auth.currentUser.uid) ? auth.currentUser.uid : uid;
     const roomRef = db.ref(`rooms/${rid}`);
@@ -1240,63 +1249,28 @@ function App(){
     setScreen("roomwait");
   }
 
-  function startVsGame(){
-    const roomRef = db.ref(`rooms/${roomId}`);
-    const companiesObj = {};
-    companies.forEach(c=>{ companiesObj[c.code]={name:c.name, oku:c.oku, cho:c.cho}; });
-    roomRef.child("companies").set(companiesObj);
-    const ft = Math.random() < 0.5 ? "host" : "guest";
-    setFirstTurn(ft);
-    roomRef.child("turn/current").set(ft);
-    roomRef.child("turn/startedAt").set(firebase.database.ServerValue.TIMESTAMP);
-    roomRef.child("status").set("playing");
-    roomRef.child("timer/startedAt").set(firebase.database.ServerValue.TIMESTAMP);
-    setScreen("countdown"); // カウントダウン画面へ
-  }
-
-  // 再戦：Firebaseのゲームデータをリセットして同じルームで再戦
+  // ── 修正②：retryVsGame は status を "waiting" に戻すだけ ──
+  // 押した人が誰でも同じ動き。
+  // 両者とも status の "waiting" 検知（VsGameScreen 内）でルーム待機画面へ自動遷移する。
+  // 企業リスト抽出・gameKey 更新は startVsGame() に任せる。
   function retryVsGame(){
     const roomRef = db.ref(`rooms/${roomId}`);
-    const newCompanies = selectCompanies(allCompanies);
-    setCompanies(newCompanies);
-    setGameKey(k=>k+1);
-
-    if(role==="host"){
-      const companiesObj = {};
-      newCompanies.forEach(c=>{ companiesObj[c.code]={name:c.name, oku:c.oku, cho:c.cho}; });
-      const ft = Math.random() < 0.5 ? "host" : "guest";
-      setFirstTurn(ft);
-      roomRef.update({
-        status: "playing",
-        companies: companiesObj,
-        "turn/current": ft,
-        "turn/startedAt": firebase.database.ServerValue.TIMESTAMP,
-        "players/host/stopped": false,
-        "players/host/selections": null,
-        "players/guest/stopped": false,
-        "players/guest/selections": null,
-        "timer/startedAt": firebase.database.ServerValue.TIMESTAMP,
-      });
-      setScreen("countdown");
-    } else {
-      // ゲストはホストのリセットを待つ
-      setScreen("guestwait");
-      roomRef.child("status").on("value", snap=>{
-        if(snap.val()==="playing"){
-          roomRef.once("value", roomSnap=>{
-            const roomData = roomSnap.val() || {};
-            const companiesObj = roomData.companies || {};
-            const companiesList = Object.entries(companiesObj)
-              .map(([code, v])=>({ code, name:v.name, oku:v.oku, cho:v.cho, rankCD:0 }))
-              .sort((a,b)=>a.code.localeCompare(b.code, undefined, {numeric:true}));
-            setCompanies(companiesList);
-            const ft = roomData.turn?.current || "host";
-            setFirstTurn(ft);
-            setScreen("countdown");
-          });
-        }
-      });
-    }
+    roomRef.update({
+      status: "waiting",
+      companies: null,
+      "turn/current": null,
+      "turn/startedAt": null,
+      "players/host/stopped": false,
+      "players/host/selections": null,
+      "players/guest/stopped": false,
+      "players/guest/selections": null,
+      "timer/startedAt": null,
+      "timer/triggerStopAt": null,
+      "timer/deadlineAt": null,
+    });
+    // 自分はすぐルーム待機画面へ（相手は VsGameScreen の status 購読で自動遷移）
+    setGuestJoined(true); // 再戦時はゲストはすでにいるのでtrue
+    setScreen("roomwait");
   }
 
   function goVsResult(mySelected, oppSelected, guesses, isDisconnect){
@@ -1355,6 +1329,7 @@ function App(){
           key={gameKey} difficulty={difficulty} companies={companies}
           role={role} roomId={roomId} uid={uid}
           onGameEnd={(my, opp, g, isDisconnect)=>goVsResult(my, opp, g, isDisconnect)}
+          onRetry={()=>{ setGuestJoined(true); setScreen("roomwait"); }}
         />
       )}
       {screen==="vsresult" && (
