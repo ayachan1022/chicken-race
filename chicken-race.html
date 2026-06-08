@@ -1311,17 +1311,27 @@ function App(){
   // ── 再戦監視：vsresult 表示中に Firebase の変化を監視 ──
   // ゲストが押した → retryRequested:true → ホストのボタンが変化
   // ホストが押した → status:"playing" → 両者ゲスト待機画面へ
+  // ④ 修正：vsresult に遷移した直後は status がまだ "playing" の場合がある。
+  //    "finished" を一度確認してから "playing" を監視する2段階方式にして誤検知を防ぐ。
   const [retryRequested, setRetryRequested] = useState(false);
   useEffect(()=>{
     if(screen !== "vsresult" || !roomId) return;
-    setRetryRequested(false); // 画面表示のたびにリセット
+    setRetryRequested(false);
     const retryRef  = db.ref(`rooms/${roomId}/retryRequested`);
     const statusRef = db.ref(`rooms/${roomId}/status`);
+    let finishedSeen = false; // "finished" を一度見たかどうかのフラグ
+
     retryRef.on("value", snap=>{
       if(snap.val()===true) setRetryRequested(true);
     });
     statusRef.on("value", snap=>{
-      if(snap.val()==="playing"){
+      const s = snap.val();
+      if(s === "finished"){
+        finishedSeen = true; // "finished" を確認
+        return;
+      }
+      // "finished" を見た後に "playing" になった = 再戦スタート
+      if(s === "playing" && finishedSeen){
         retryRef.off();
         statusRef.off();
         setScreen("guestwait");
