@@ -1278,6 +1278,21 @@ function App(){
     setScreen("vsresult");
   }
 
+  // ── 再戦監視：vsresult 表示中に相手が「もう一度」を押したら自動でルーム待機画面へ ──
+  // VsGameScreen はアンマウント済みなので、App レベルで status を監視し続ける
+  useEffect(()=>{
+    if(screen !== "vsresult" || !roomId) return;
+    const statusRef = db.ref(`rooms/${roomId}/status`);
+    statusRef.on("value", snap=>{
+      if(snap.val() === "waiting"){
+        statusRef.off();
+        setGuestJoined(true);
+        setScreen("roomwait");
+      }
+    });
+    return ()=>statusRef.off();
+  },[screen, roomId]);
+
   if(screen==="loading" || (allCompanies===null && loadError===null)) return <LoadingScreen />;
   if(loadError) return <ErrorScreen message={loadError} onRetry={loadCSV} />;
 
