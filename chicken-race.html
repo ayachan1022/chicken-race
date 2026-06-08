@@ -554,23 +554,6 @@ function RoomWaitScreen({roomId, role, difficulty, guestJoined, onStart, onLeave
 }
 
 // ========================================
-// 相手ターン中オーバーレイ
-// ========================================
-function OppTurnOverlay({onHide}){
-  return (
-    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",zIndex:15}}>
-      <div style={{background:"#fff",borderRadius:16,padding:"28px 24px",textAlign:"center",margin:"0 32px",maxWidth:280,width:"100%"}}>
-        <div style={{fontSize:15,fontWeight:600,color:"#434343",marginBottom:6}}>相手のターン</div>
-        <div style={{fontSize:13,color:"#aaa",marginBottom:20}}>少々お待ちください。</div>
-        <button onClick={onHide} style={{background:"#f5f5f5",border:"none",borderRadius:10,padding:"10px 20px",fontSize:13,color:"#434343",cursor:"pointer",fontFamily:"inherit"}}>
-          銘柄を確認する
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ========================================
 // ゲーム画面（2人対戦・ターン制）
 // ========================================
 function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRetry}){
@@ -592,10 +575,8 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
 
   const [currentTurn, setCurrentTurn]   = useState(null);
   const [turnTimeLeft, setTurnTimeLeft] = useState(60);
-  const [showOppTurn, setShowOppTurn]   = useState(false);
   const [showTimeUp, setShowTimeUp]     = useState(false);
 
-  const oppTurnTimerRef = useRef(null);
   const stopTimerRef    = useRef(null);
   const turnTimerRef    = useRef(null);
   const mySelRef        = useRef([]);
@@ -605,13 +586,13 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
   const oppSelectedRef  = useRef([]);
   const gameEndedRef    = useRef(false);
   const oppRole         = role==="host" ? "guest" : "host";
-  const roomRef         = db.ref(`rooms/${roomId}`);
+  const roomRef         = useRef(db.ref(`rooms/${roomId}`)).current;
   const isMyTurn        = currentTurn === role && !myStopped;
 
-  function showOppTurnBriefly(){
-    setShowOppTurn(true);
-    clearTimeout(oppTurnTimerRef.current);
-    oppTurnTimerRef.current = setTimeout(()=>setShowOppTurn(false), 3000);
+  // 相手のターン開始をトーストで通知（選択通知と同じ見せ方）
+  function showOppTurnToast(){
+    setToast("__opp_turn__"); // 特殊キーでターン通知と選択通知を区別
+    setToastKey(k=>k+1);
   }
 
   // ターンタイマー（1分）
@@ -680,9 +661,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
       currentTurnRef.current = t;
       setCurrentTurn(t);
       if(t !== role && !myStoppedRef.current){
-        showOppTurnBriefly();
-      } else {
-        setShowOppTurn(false);
+        showOppTurnToast();
       }
     });
 
@@ -739,10 +718,9 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
     roomRef.child(`players/${oppRole}/stopped`).off();
     roomRef.child(`players/${oppRole}/connected`).off();
     roomRef.child("turn/current").off();
-    if(role === "guest") roomRef.child("status").off(); // ゲストのみ購読しているので解除もゲストのみ
+    if(role === "guest") roomRef.child("status").off();
     clearInterval(turnTimerRef.current);
     clearTimeout(stopTimerRef.current);
-    clearTimeout(oppTurnTimerRef.current);
   }
 
   function handleTurnTimeUp(){
@@ -773,7 +751,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
     if(allSelCodes.has(c.code)) return;
     if(myStopped) return;
     if(!oppStopped && !isMyTurn){
-      showOppTurnBriefly();
+      showOppTurnToast();
       return;
     }
     setPopup(c);
@@ -801,7 +779,6 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
   function doStop(){
     myStoppedRef.current = true;
     setMyStopped(true);
-    setShowOppTurn(false);
     clearInterval(turnTimerRef.current);
     roomRef.child(`players/${role}/stopped`).set(true);
     roomRef.child(`players/${role}/stoppedAt`).set(firebase.database.ServerValue.TIMESTAMP);
@@ -881,12 +858,8 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
 
       {toast && (
         <div key={toastKey} className="opponent-toast">
-          相手は「{toast}」を選びました
+          {toast === "__opp_turn__" ? "相手のターンです" : `相手は「${toast}」を選びました`}
         </div>
-      )}
-
-      {showOppTurn && !myStopped && (
-        <OppTurnOverlay onHide={()=>setShowOppTurn(false)} />
       )}
 
       {showTimeUp && (
@@ -1113,7 +1086,7 @@ function CountdownScreen({myTurn, onDone}){
   return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100dvh",background:"#fff"}}>
       <div style={{fontSize:14,color:"#bbb",marginBottom:24}}>
-        {myTurn ? "あなたが先行です！" : "相手が先行です"}
+        {myTurn ? "あなたが先攻です！" : "あなたは後攻です"}
       </div>
       <div style={{fontSize:80,fontWeight:700,color:count===0?"#4CAF50":"#434343",lineHeight:1,transition:"color 0.2s"}}>
         {count===0?"GO!":count}
@@ -1188,10 +1161,11 @@ function App(){
 
   // ── 修正①：startVsGame でその都度企業を抽出・Firebase に保存 ──
   // 初回もリトライ時もここを通るので企業リストは常に新規抽出
+  // setGameKey はホスト側のみここで行う（ゲストは guestwait 監視の useEffect で行う）
   function startVsGame(){
     const newCompanies = selectCompanies(allCompanies);
     setCompanies(newCompanies);
-    setGameKey(k=>k+1);
+    setGameKey(k=>k+1); // ホスト専用：ゲストは guestwait 監視側でインクリメント
 
     const roomRef = db.ref(`rooms/${roomId}`);
     const companiesObj = {};
@@ -1301,7 +1275,8 @@ function App(){
           setCompanies(companiesList);
           const ft = roomData.turn?.current || "host";
           setFirstTurn(ft);
-          setGameKey(k=>k+1);
+          // ゲストのみ gameKey をインクリメント（ホストは startVsGame() で済み）
+          if(role === "guest") setGameKey(k=>k+1);
           setScreen("countdown");
         });
       }
