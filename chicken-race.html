@@ -892,8 +892,8 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
       {stopDlg && (
         <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:20}}>
           <div style={{background:"#fff",borderRadius:16,margin:"0 32px",padding:"24px",width:"100%",maxWidth:280}}>
-            <p style={{fontSize:15,fontWeight:500,color:C,marginBottom:8}}>本当にストップしますか？</p>
-            <p style={{fontSize:12,color:"#bbb",marginBottom:22}}>相手にはまだ2分間の猶予が発生します</p>
+            <p style={{fontSize:15,fontWeight:500,color:C,marginBottom:oppStopped?22:8}}>本当にストップしますか？</p>
+            {!oppStopped && <p style={{fontSize:12,color:"#bbb",marginBottom:22}}>相手にはまだ2分間の猶予が発生します</p>}
             <div style={{display:"flex",gap:10}}>
               <button onClick={()=>setStopDlg(false)} style={{flex:1,border:"1px solid #ccc",background:"#fff",color:"#555",padding:"11px",borderRadius:10,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>続ける</button>
               <button onClick={()=>{setStopDlg(false);doStop();}} style={{flex:1,background:"#434343",color:"#fff",border:"none",padding:"11px",borderRadius:10,fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>やめる</button>
@@ -973,7 +973,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
 // ========================================
 // 結果画面（2人対戦）
 // ========================================
-function VsResultScreen({difficulty, mySelected, oppSelected, role, isDisconnect, retryRequested, onRetry, onTop}){
+function VsResultScreen({difficulty, mySelected, oppSelected, role, isDisconnect, retryRequested, guesses, onRetry, onTop}){
   const targetTri = TARGET[difficulty];
   const myTotal  = mySelected.reduce((s,c)=>s+c.cho, 0);
   const oppTotal = oppSelected.reduce((s,c)=>s+c.cho, 0);
@@ -995,7 +995,44 @@ function VsResultScreen({difficulty, mySelected, oppSelected, role, isDisconnect
 
   const verdictColor = verdict==="勝ち！" ? "#4CAF50" : verdict==="負け" ? "#E24B4A" : C;
 
-  function CompanyList({list, label, isDobun}){
+  function fmtGuess(c){
+    const cho = parseFloat((guesses[c.code]||{}).cho||"0")||0;
+    const oku = parseFloat((guesses[c.code]||{}).oku||"0")||0;
+    const totalTri = cho + oku/10000;
+    if(cho===0 && oku===0) return null;
+    return fmt(totalTri, unit).replace("円","");
+  }
+
+  // 自分のリスト：予想列あり
+  function MyCompanyList({list, label, isDobun}){
+    return (
+      <div style={{marginBottom:16}}>
+        <div style={{background:"#fafafa",padding:"5px 18px",borderBottom:"0.5px solid #eee"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{display:"flex",fontSize:10,color:"#bbb",gap:4,flex:1}}>
+              <span style={{minWidth:34}}>コード</span>
+              <span style={{flex:1}}>{label}（{list.length}社）</span>
+              <span style={{minWidth:52,textAlign:"right"}}>予想</span>
+              <span style={{minWidth:70,textAlign:"right"}}>実際</span>
+            </div>
+            {isDobun && <span style={{fontSize:11,color:"#E24B4A",fontWeight:600,marginLeft:8,flexShrink:0}}>ドボン</span>}
+          </div>
+        </div>
+        {list.length===0 && <p style={{textAlign:"center",color:"#bbb",fontSize:13,padding:"12px 0"}}>銘柄を選択しませんでした</p>}
+        {list.map(c=>(
+          <div key={c.code} style={{display:"flex",alignItems:"center",gap:4,padding:"8px 18px",borderBottom:"0.5px solid #f5f5f5",fontSize:12}}>
+            <span style={{color:"#bbb",fontSize:10,minWidth:34}}>{c.code}</span>
+            <span style={{flex:1,color:C,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name}</span>
+            <span style={{minWidth:52,textAlign:"right",color:"#aaa"}}>{fmtGuess(c)||"−"}</span>
+            <span style={{minWidth:70,textAlign:"right",fontWeight:500,color:C}}>{fmt(c.cho,unit)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // 相手のリスト：予想列なし
+  function OppCompanyList({list, label, isDobun}){
     return (
       <div style={{marginBottom:16}}>
         <div style={{background:"#fafafa",padding:"5px 18px",borderBottom:"0.5px solid #eee"}}>
@@ -1051,8 +1088,8 @@ function VsResultScreen({difficulty, mySelected, oppSelected, role, isDisconnect
       </div>
 
       <div style={{flex:1,overflowY:"auto"}}>
-        <CompanyList list={mySelected}  label={role==="host"?"ホスト（自分）":"ゲスト（自分）"}  isDobun={myDobun}/>
-        {!isDisconnect && <CompanyList list={oppSelected} label={role==="host"?"ゲスト（相手）":"ホスト（相手）"} isDobun={oppDobun}/>}
+        <MyCompanyList  list={mySelected}  label={role==="host"?"ホスト（自分）":"ゲスト（自分）"}  isDobun={myDobun}/>
+        {!isDisconnect && <OppCompanyList list={oppSelected} label={role==="host"?"ゲスト（相手）":"ホスト（相手）"} isDobun={oppDobun}/>}
       </div>
 
       <div style={{padding:"12px 18px 40px",display:"flex",flexDirection:"column",gap:10,flexShrink:0}}>
@@ -1344,6 +1381,7 @@ function App(){
           mySelected={vsResult.mySelected} oppSelected={vsResult.oppSelected}
           role={role} isDisconnect={vsResult.isDisconnect}
           retryRequested={retryRequested}
+          guesses={vsResult.guesses||{}}
           onRetry={retryVsGame}
           onTop={()=>{ setScreen("top"); setRoomId(null); setRole(null); setGuestJoined(false); }}
         />
