@@ -1295,6 +1295,35 @@ function App(){
     return ()=>{ retryRef.off(); statusRef.off(); };
   },[screen, roomId]);
 
+
+  // ── guestwait 監視：ホスト・ゲスト両方、guestwait 中に status:"playing" を検知したらカウントダウンへ ──
+  // 初回入室時の購読に頼らず、guestwait 画面になるたびに必ず監視を張り直す
+  useEffect(()=>{
+    if(screen !== "guestwait" || !roomId) return;
+    const roomRef   = db.ref(`rooms/${roomId}`);
+    const statusRef = roomRef.child("status");
+    statusRef.on("value", snap=>{
+      if(snap.val() === "playing"){
+        statusRef.off();
+        roomRef.once("value", roomSnap=>{
+          const roomData = roomSnap.val() || {};
+          const diff = roomData.difficulty || "normal";
+          setDiff(diff);
+          const companiesObj = roomData.companies || {};
+          const companiesList = Object.entries(companiesObj)
+            .map(([code, v])=>({ code, name:v.name, oku:v.oku, cho:v.cho, rankCD:0 }))
+            .sort((a,b)=>a.code.localeCompare(b.code, undefined, {numeric:true}));
+          setCompanies(companiesList);
+          const ft = roomData.turn?.current || "host";
+          setFirstTurn(ft);
+          setGameKey(k=>k+1);
+          setScreen("countdown");
+        });
+      }
+    });
+    return ()=>statusRef.off();
+  },[screen, roomId]);
+
   if(screen==="loading" || (allCompanies===null && loadError===null)) return <LoadingScreen />;
   if(loadError) return <ErrorScreen message={loadError} onRetry={loadCSV} />;
 
