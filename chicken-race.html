@@ -569,6 +569,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
   const [toastKey, setToastKey]         = useState(0);
   const [myStopped, setMyStopped]       = useState(false);
   const [oppStopped, setOppStopped]     = useState(false);
+  const [showOppStopped, setShowOppStopped] = useState(false); // ①相手STOP通知オーバーレイ
   const [stopTimeLeft, setStopTimeLeft] = useState(null);
   const [guesses, setGuesses]           = useState({});
   const [disconnected, setDisconnected] = useState(false);
@@ -637,7 +638,9 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
     const prevOppCodes = new Set();
     oppSelRef.on("value", snap=>{
       const data = snap.val() || {};
-      const codes = Object.keys(data);
+      // タイムスタンプ順にソートして選択順を保持
+      const entries = Object.entries(data).sort(([,a],[,b]) => a - b);
+      const codes = entries.map(([code]) => code);
       codes.forEach(code=>{
         if(!prevOppCodes.has(code)){
           prevOppCodes.add(code);
@@ -669,6 +672,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
     oppStopRef.on("value", snap=>{
       if(snap.val()===true){
         setOppStopped(true);
+        setShowOppStopped(true); // ①オーバーレイ表示
         if(!myStoppedRef.current){
           setStopTimeLeft(120);
         } else {
@@ -696,13 +700,16 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
           cleanup();
           roomRef.once("value", roomSnap=>{
             const data = roomSnap.val() || {};
-            const mySelections = Object.keys((data.players?.[role]?.selections)||{})
-              .map(code=>companies.find(c=>c.code===code)).filter(Boolean);
-            const oppSelections = Object.keys((data.players?.[oppRole]?.selections)||{})
-              .map(code=>companies.find(c=>c.code===code)).filter(Boolean);
+            const mySelectionsRaw  = data.players?.[role]?.selections    || {};
+            const oppSelectionsRaw = data.players?.[oppRole]?.selections || {};
+            const sortByTime = (raw) =>
+              Object.entries(raw)
+                .sort(([,a],[,b]) => a - b)
+                .map(([code]) => companies.find(c=>c.code===code))
+                .filter(Boolean);
             onGameEnd(
-              mySelRef.current.length > 0 ? mySelRef.current : mySelections,
-              oppSelectedRef.current.length > 0 ? oppSelectedRef.current : oppSelections,
+              mySelRef.current.length > 0 ? mySelRef.current : sortByTime(mySelectionsRaw),
+              oppSelectedRef.current.length > 0 ? oppSelectedRef.current : sortByTime(oppSelectionsRaw),
               guessRef.current, false
             );
           });
@@ -761,7 +768,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
     const c=popup; setPopup(null);
     roomRef.child(`players/${role}/selections/${c.code}`).transaction(current=>{
       if(current !== null) return;
-      return true;
+      return firebase.database.ServerValue.TIMESTAMP;
     }, (err, committed)=>{
       if(committed){
         const next=[...mySelRef.current, c];
@@ -906,8 +913,24 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
         <div onClick={()=>setShowMyList(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",zIndex:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",width:"100%",borderRadius:"16px 16px 0 0",padding:"20px",maxHeight:"70vh",display:"flex",flexDirection:"column"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexShrink:0}}>
-              <span style={{fontSize:14,fontWeight:500,color:C}}>自分のリスト（{mySelected.length}社）</span>
-              <button onClick={()=>setShowMyList(false)} style={{background:"none",border:"none",fontSize:20,color:"#ccc",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+              <span style={{fontSize:14,fontWeight:500,color:C}}>自分のリスト</span>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                {(()=>{
+                  const total = mySelected.reduce((s,c)=>{
+                    const cho = parseFloat((guesses[c.code]||{}).cho||"0")||0;
+                    const oku = parseFloat((guesses[c.code]||{}).oku||"0")||0;
+                    return s + cho + oku/10000;
+                  },0);
+                  const remaining = TARGET[difficulty] - total;
+                  return (
+                    <span style={{fontSize:10,color:"#aaa"}}>
+                      合計：<span style={{fontSize:12,color:C,fontWeight:500}}>{total.toFixed(2)}</span>兆
+                      　残り：<span style={{fontSize:12,color:"#E24B4A",fontWeight:500}}>{remaining.toFixed(2)}</span>兆
+                    </span>
+                  );
+                })()}
+                <button onClick={()=>setShowMyList(false)} style={{background:"none",border:"none",fontSize:20,color:"#ccc",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+              </div>
             </div>
             <div style={{overflowY:"auto",flex:1}}>
               {mySelected.length===0 && <p style={{fontSize:13,color:"#bbb",textAlign:"center",padding:"16px 0"}}>まだ選択していません</p>}
@@ -963,6 +986,22 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
           <div style={{background:"#fff",borderRadius:16,padding:"28px 24px",textAlign:"center",margin:"0 32px"}}>
             <div style={{fontSize:24,marginBottom:8}}>📡</div>
             <div style={{fontSize:15,fontWeight:600,color:C}}>相手が切断しました</div>
+          </div>
+        </div>
+      )}
+
+      {/* ①相手STOP通知オーバーレイ */}
+      {showOppStopped && (
+        <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:28}}>
+          <div style={{background:"#fff",borderRadius:16,padding:"28px 24px",textAlign:"center",margin:"0 32px",maxWidth:280,width:"100%"}}>
+            <div style={{fontSize:22,marginBottom:10}}>🛑</div>
+            <div style={{fontSize:15,fontWeight:600,color:C,marginBottom:6}}>相手がSTOPしました</div>
+            <div style={{fontSize:13,color:"#aaa",marginBottom:22}}>
+              {myStopped ? "結果を確認します" : "残り2分で選択を続けられます"}
+            </div>
+            <button onClick={()=>setShowOppStopped(false)} style={{width:"100%",background:"#434343",color:"#fff",border:"none",borderRadius:12,padding:"12px",fontSize:14,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}>
+              閉じる
+            </button>
           </div>
         </div>
       )}
@@ -1123,7 +1162,7 @@ function CountdownScreen({myTurn, onDone}){
   return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100dvh",background:"#fff"}}>
       <div style={{fontSize:14,color:"#bbb",marginBottom:24}}>
-        {myTurn ? "あなたが先攻です！" : "あなたは後攻です"}
+        {myTurn ? "あなたが先攻です！" : "あなたは後攻です！"}
       </div>
       <div style={{fontSize:80,fontWeight:700,color:count===0?"#4CAF50":"#434343",lineHeight:1,transition:"color 0.2s"}}>
         {count===0?"GO!":count}
@@ -1294,12 +1333,15 @@ function App(){
 
   // ── guestwait 監視：ホスト・ゲスト両方、guestwait 中に status:"playing" を検知したらカウントダウンへ ──
   // 初回入室時の購読に頼らず、guestwait 画面になるたびに必ず監視を張り直す
+  // ④ "finished" が来た場合は無視（ゲーム終了直後に誤ってカウントダウンへ飛ぶバグを防ぐ）
   useEffect(()=>{
     if(screen !== "guestwait" || !roomId) return;
     const roomRef   = db.ref(`rooms/${roomId}`);
     const statusRef = roomRef.child("status");
     statusRef.on("value", snap=>{
-      if(snap.val() === "playing"){
+      const s = snap.val();
+      if(s === "finished") return; // ゲーム終了は無視
+      if(s === "playing"){
         statusRef.off();
         roomRef.once("value", roomSnap=>{
           const roomData = roomSnap.val() || {};
