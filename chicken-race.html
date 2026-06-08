@@ -253,6 +253,11 @@ function GameScreen({difficulty, companies, onStop, onTimeout}){
     const next=[...selected,c];
     setSelected(next);
     selRef.current=next;
+    // 全企業選択したら自動終了
+    if(next.length >= companies.length){
+      clearInterval(timerRef.current);
+      onStopRef.current(next, guessRef.current);
+    }
   }
   function doStop(){ clearInterval(timerRef.current); onStopRef.current(selected, guessRef.current); }
 
@@ -701,34 +706,30 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
     myConRef.set(true);
     myConRef.onDisconnect().set(false);
 
-    // ── 修正③：status 購読を一本化 ──
-    // "waiting" → 再戦リクエスト（どちらかが「もう一度」を押した）→ onRetry へ
-    // "finished" → ゲスト側の結果画面遷移
-    statusRef.on("value", snap=>{
-      const s = snap.val();
-      if(s === "waiting" && !gameEndedRef.current){
-        gameEndedRef.current = true;
-        cleanup();
-        onRetry();
-        return;
-      }
-      if(role === "guest" && s === "finished" && !gameEndedRef.current){
-        gameEndedRef.current = true;
-        cleanup();
-        roomRef.once("value", roomSnap=>{
-          const data = roomSnap.val() || {};
-          const mySelections = Object.keys((data.players?.[role]?.selections)||{})
-            .map(code=>companies.find(c=>c.code===code)).filter(Boolean);
-          const oppSelections = Object.keys((data.players?.[oppRole]?.selections)||{})
-            .map(code=>companies.find(c=>c.code===code)).filter(Boolean);
-          onGameEnd(
-            mySelRef.current.length > 0 ? mySelRef.current : mySelections,
-            oppSelectedRef.current.length > 0 ? oppSelectedRef.current : oppSelections,
-            guessRef.current, false
-          );
-        });
-      }
-    });
+    // ── ④ status 購読はゲスト専用（"finished" 検知で結果画面へ） ──
+    // ホスト側は handleGameEnd() が直接 status:"finished" を書き込むので購読不要
+    // "waiting" 検知（再戦）は App レベルの guestwait 監視に移管済みのためここでは扱わない
+    if(role === "guest"){
+      statusRef.on("value", snap=>{
+        const s = snap.val();
+        if(s === "finished" && !gameEndedRef.current){
+          gameEndedRef.current = true;
+          cleanup();
+          roomRef.once("value", roomSnap=>{
+            const data = roomSnap.val() || {};
+            const mySelections = Object.keys((data.players?.[role]?.selections)||{})
+              .map(code=>companies.find(c=>c.code===code)).filter(Boolean);
+            const oppSelections = Object.keys((data.players?.[oppRole]?.selections)||{})
+              .map(code=>companies.find(c=>c.code===code)).filter(Boolean);
+            onGameEnd(
+              mySelRef.current.length > 0 ? mySelRef.current : mySelections,
+              oppSelectedRef.current.length > 0 ? oppSelectedRef.current : oppSelections,
+              guessRef.current, false
+            );
+          });
+        }
+      });
+    }
 
     return ()=>cleanup();
   },[]);
@@ -738,7 +739,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
     roomRef.child(`players/${oppRole}/stopped`).off();
     roomRef.child(`players/${oppRole}/connected`).off();
     roomRef.child("turn/current").off();
-    roomRef.child("status").off();
+    if(role === "guest") roomRef.child("status").off(); // ゲストのみ購読しているので解除もゲストのみ
     clearInterval(turnTimerRef.current);
     clearTimeout(stopTimerRef.current);
     clearTimeout(oppTurnTimerRef.current);
@@ -1155,23 +1156,7 @@ function App(){
         roomRef.child("players/guest/uid").set(cred.user.uid);
         roomRef.child("players/guest/connected").set(true);
         roomRef.child("players/guest/connected").onDisconnect().set(false);
-        roomRef.child("status").on("value", snap=>{
-          if(snap.val()==="playing"){
-            roomRef.once("value", roomSnap=>{
-              const roomData = roomSnap.val() || {};
-              const diff = roomData.difficulty || "normal";
-              setDiff(diff);
-              const companiesObj = roomData.companies || {};
-              const companiesList = Object.entries(companiesObj)
-                .map(([code, v])=>({ code, name:v.name, oku:v.oku, cho:v.cho, rankCD:0 }))
-                .sort((a,b)=>a.code.localeCompare(b.code, undefined, {numeric:true}));
-              setCompanies(companiesList);
-              const ft = roomData.turn?.current || "host";
-              setFirstTurn(ft);
-              setScreen("countdown");
-            });
-          }
-        });
+        // status購読は guestwait 監視の useEffect に一本化したためここでは不要
         setScreen("guestwait");
       });
     } else {
