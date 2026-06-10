@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>遊び方｜時価総額チキンレース</title>
+<link href="https://fonts.googleapis.com/css2?family=Sawarabi+Mincho&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#e8e8e8;display:flex;justify-content:center;font-family:'Sawarabi Mincho','Hiragino Mincho ProN','Yu Mincho',serif;color:#434343;}
+.container{width:100%;max-width:430px;min-height:100dvh;background:#fff;display:flex;flex-direction:column;}
+.header{display:flex;align-items:center;padding:12px 16px;border-bottom:0.5px solid #eee;}
+.header a{font-size:13px;color:#bbb;text-decoration:none;}
+.content{flex:1;padding:28px 24px;}
+h1{font-size:22px;font-weight:700;margin-bottom:6px;}
+.subtitle{font-size:13px;color:#aaa;margin-bottom:32px;}
+
+/* タブ */
+.tabs{display:flex;gap:8px;margin-bottom:28px;}
+.tab{flex:1;padding:10px;border-radius:10px;border:1.5px solid #e0e0e0;background:#fff;font-size:14px;font-family:inherit;color:#aaa;cursor:pointer;text-align:center;}
+.tab.active{background:#434343;color:#fff;border-color:#434343;}
+
+/* セクション */
+.section{margin-bottom:28px;}
+.section-label{font-size:10px;color:#aaa;letter-spacing:0.08em;margin-bottom:10px;}
+.step{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start;}
+.step-num{width:26px;height:26px;border-radius:50%;background:#434343;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
+.step-body{}
+.step-title{font-size:14px;font-weight:700;margin-bottom:3px;}
+.step-desc{font-size:12px;color:#777;line-height:1.8;}
+
+/* ルールカード */
+.rule-card{background:#f5f5f5;border-radius:12px;padding:16px;margin-bottom:12px;}
+.rule-card-title{font-size:13px;font-weight:700;margin-bottom:6px;}
+.rule-card-desc{font-size:12px;color:#777;line-height:1.8;}
+
+/* 終了条件 */
+.end-table{width:100%;border-collapse:collapse;}
+.end-table td{font-size:12px;padding:9px 0;border-bottom:0.5px solid #f0f0f0;vertical-align:top;line-height:1.7;}
+.end-table td:first-child{color:#E24B4A;font-weight:700;width:90px;padding-right:8px;}
+
+/* バッジ */
+.badge{display:inline-block;background:#E24B4A;color:#fff;font-size:10px;padding:2px 8px;border-radius:20px;margin-left:6px;vertical-align:middle;}
+.badge.green{background:#4CAF50;}
+
+.divider{border:none;border-top:0.5px solid #eee;margin:28px 0;}
+
+.footer{padding:16px 24px 32px;border-top:0.5px solid #eee;display:flex;justify-content:center;gap:20;}
+.footer a{font-size:11px;color:#bbb;text-decoration:none;}
+
+.play-btn{display:block;width:100%;background:#434343;color:#fff;border:none;border-radius:12px;padding:15px;font-size:15px;font-family:inherit;font-weight:500;cursor:pointer;text-align:center;text-decoration:none;margin-top:8px;}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <a href="./chicken-race.html">‹ トップに戻る</a>
+  </div>
+
+  <div class="content">
+    <h1>遊び方</h1>
+    <p class="subtitle">時価総額チキンレースのルールを説明します</p>
+
+    <!-- タブ -->
+    <div class="tabs">
+      <button class="tab active" id="tab-solo" onclick="switchTab('solo')">1人プレイ</button>
+      <button class="tab" id="tab-vs" onclick="switchTab('vs')">2人対戦</button>
+    </div>
+
+    <!-- 1人プレイ -->
+    <div id="content-solo">
+
+      <div class="section">
+        <div class="section-label">ゲームの流れ</div>
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">難易度を選ぶ</div>
+            <div class="step-desc">Easy（100兆円）・Normal（50兆円）・Hard（10兆円）の3種類。目標金額が低いほど難しくなります。</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">企業を選んでいく</div>
+            <div class="step-desc">日本の上場企業が約100社表示されます。会社名を手がかりに時価総額を推測しながら、目標金額に近づくよう選んでいきましょう。</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">いいところでSTOP！</div>
+            <div class="step-desc">目標金額に近づいたと思ったらSTOPボタンを押します。制限時間は5分。時間切れでも自動で結果が出ます。</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-title">結果発表</div>
+            <div class="step-desc">選んだ企業の時価総額が初めて公開されます。目標金額との差額が小さいほど好成績です。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">ルール</div>
+        <div class="rule-card">
+          <div class="rule-card-title">時価総額は非表示</div>
+          <div class="rule-card-desc">ゲーム中は各企業の時価総額は見えません。会社名だけを手がかりに規模を推測するのがこのゲームの醍醐味です。</div>
+        </div>
+        <div class="rule-card">
+          <div class="rule-card-title">選択の取り消しは不可</div>
+          <div class="rule-card-desc">一度選んだ企業は取り消せません。よく考えてから選びましょう。</div>
+        </div>
+        <div class="rule-card">
+          <div class="rule-card-title">ドボン <span class="badge">注意</span></div>
+          <div class="rule-card-desc">合計時価総額が目標金額を超えるとドボン（失格）です。ただしドボンはゲーム中には分からず、結果画面を開いて初めて発覚します。</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">終了条件</div>
+        <table class="end-table">
+          <tr><td>5分経過</td><td>タイムアップで自動終了→結果へ</td></tr>
+          <tr><td>STOP</td><td>確認ダイアログ→「やめる」で結果へ</td></tr>
+          <tr><td>全社選択</td><td>全企業を選ぶと自動で結果へ</td></tr>
+        </table>
+      </div>
+
+      <a href="./chicken-race.html" class="play-btn">さっそく遊ぶ →</a>
+    </div>
+
+    <!-- 2人対戦 -->
+    <div id="content-vs" style="display:none;">
+
+      <div class="section">
+        <div class="section-label">ゲームの流れ</div>
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">ルームを作って共有する</div>
+            <div class="step-desc">「2人で遊ぶ」から難易度を選ぶとルームが作成されます。表示されたURLまたはQRコードを相手に送りましょう。</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">カウントダウンスタート</div>
+            <div class="step-desc">相手が入室したら、ホストが「ゲームを開始する」ボタンを押します。先攻・後攻がランダムで決まり、カウントダウンが始まります。</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">交互に企業を選ぶ</div>
+            <div class="step-desc">1ターン1分。自分のターンになったら企業を1社選びます。選ぶと即座にターン交代。1分以内に選べなかった場合はパスになります。</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-title">いいところでSTOP！</div>
+            <div class="step-desc">目標金額に近づいたと思ったらSTOPを押します。STOPした後は相手にまだ2分の猶予があります。</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <div class="step-title">結果発表・勝敗決定</div>
+            <div class="step-desc">両者の時価総額が公開され、目標金額との差額が小さい方の勝ちです。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">ルール</div>
+        <div class="rule-card">
+          <div class="rule-card-title">ターン制</div>
+          <div class="rule-card-desc">交互に1社ずつ選ぶターン制です。相手のターン中は選択できません。相手が選んだ企業は赤枠で表示されます。</div>
+        </div>
+        <div class="rule-card">
+          <div class="rule-card-title">ドボンしても続行できる</div>
+          <div class="rule-card-desc">合計が目標金額を超えてもゲームは続きます。ドボンは結果画面を開いて初めて分かります。相手もドボンしていれば引き分けです。</div>
+        </div>
+        <div class="rule-card">
+          <div class="rule-card-title">再戦できる <span class="badge green">便利</span></div>
+          <div class="rule-card-desc">結果画面から「もう一度」を押すと同じルームで再戦できます。URLを共有し直す必要はありません。</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">勝敗判定</div>
+        <table class="end-table">
+          <tr><td>差額が近い方</td><td>勝ち</td></tr>
+          <tr><td>差額が同じ</td><td>引き分け</td></tr>
+          <tr><td>片方だけドボン</td><td>ドボンしていない方の勝ち</td></tr>
+          <tr><td>両者ともドボン</td><td>引き分け</td></tr>
+        </table>
+      </div>
+
+      <a href="./chicken-race.html" class="play-btn">さっそく遊ぶ →</a>
+    </div>
+  </div>
+
+  <div class="footer">
+    <a href="./privacy.html">プライバシーポリシー</a>
+    <a href="./terms.html">利用規約</a>
+    <a href="./about.html">運営者情報</a>
+  </div>
+</div>
+
+<script>
+function switchTab(tab) {
+  document.getElementById('content-solo').style.display = tab === 'solo' ? 'block' : 'none';
+  document.getElementById('content-vs').style.display   = tab === 'vs'   ? 'block' : 'none';
+  document.getElementById('tab-solo').className = 'tab' + (tab === 'solo' ? ' active' : '');
+  document.getElementById('tab-vs').className   = 'tab' + (tab === 'vs'   ? ' active' : '');
+}
+</script>
+</body>
+</html>
