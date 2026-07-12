@@ -57,7 +57,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 // ========================================
 // CSV読み込み・パース
 // ========================================
-const CSV_PATH = "./data/screener_result.csv";
+const CSV_PATH = "../data/screener_result.csv";
 
 function parseLine(line) {
   const result = [];
@@ -171,13 +171,13 @@ function TopScreen({onSolo, onVs}){
       <div style={{padding:"0 24px 16px",display:"flex",flexDirection:"column",gap:10,flexShrink:0}}>
         <button className="btn-dark" onClick={onSolo}>1人で遊ぶ</button>
         <button className="btn-dark" onClick={onVs}>2人で遊ぶ</button>
-        <button style={{background:"none",border:"none",color:"#bbb",fontSize:13,marginTop:4,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>window.location.href='./howto.html'}>遊び方を見る →</button>
+        <button style={{background:"none",border:"none",color:"#bbb",fontSize:13,marginTop:4,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>window.location.href='../games/howto.html'}>遊び方を見る →</button>
       </div>
       {/* フッター */}
       <div style={{padding:"12px 24px 32px",borderTop:"0.5px solid #eee",display:"flex",justifyContent:"center",gap:20,flexShrink:0}}>
-        <a href="./privacy.html" style={{fontSize:11,color:"#bbb",textDecoration:"none"}}>プライバシーポリシー</a>
-        <a href="./terms.html"   style={{fontSize:11,color:"#bbb",textDecoration:"none"}}>利用規約</a>
-        <a href="./about.html"   style={{fontSize:11,color:"#bbb",textDecoration:"none"}}>運営者情報</a>
+        <a href="../privacy.html" style={{fontSize:11,color:"#bbb",textDecoration:"none"}}>プライバシーポリシー</a>
+        <a href="../terms.html"   style={{fontSize:11,color:"#bbb",textDecoration:"none"}}>利用規約</a>
+        <a href="../about.html"   style={{fontSize:11,color:"#bbb",textDecoration:"none"}}>運営者情報</a>
       </div>
     </div>
   );
