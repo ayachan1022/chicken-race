@@ -171,7 +171,7 @@ function TopScreen({onSolo, onVs}){
       <div style={{padding:"0 24px 16px",display:"flex",flexDirection:"column",gap:10,flexShrink:0}}>
         <button className="btn-dark" onClick={onSolo}>1人で遊ぶ</button>
         <button className="btn-dark" onClick={onVs}>2人で遊ぶ</button>
-        <button style={{background:"none",border:"none",color:"#bbb",fontSize:13,marginTop:4,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>window.location.href='../games/howto.html'}>遊び方を見る →</button>
+        <button style={{background:"none",border:"none",color:"#bbb",fontSize:13,marginTop:4,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>window.location.href='./howto.html'}>遊び方を見る →</button>
       </div>
       {/* フッター */}
       <div style={{padding:"12px 24px 32px",borderTop:"0.5px solid #eee",display:"flex",justifyContent:"center",gap:20,flexShrink:0}}>
@@ -274,7 +274,7 @@ function GameScreen({difficulty, companies, onStop, onTimeout}){
       <div style={{background:"#fff",borderBottom:"0.5px solid #e8e8e8",flexShrink:0}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px 0"}}>
           <button style={{background:"none",border:"none",fontSize:22,color:"#888",cursor:"default",padding:0,opacity:0.3,fontFamily:"inherit"}}>‹</button>
-          <div style={{display:"flex",gap:14,color:"#888",fontSize:17}}>
+          <div style={{display:"flex",gap:14,color:"#ccc",fontSize:17,opacity:0.4,cursor:"default"}}>
             <span>☰</span><span>?</span><span>…</span>
           </div>
         </div>
@@ -424,7 +424,7 @@ function ResultScreen({difficulty, selected, isDobun, guesses, onRetry, onTop}){
             <button onClick={()=>setUnit("cho")} style={{padding:"3px 8px",border:"none",cursor:"pointer",fontFamily:"inherit",background:unit==="cho"?"#434343":"#fff",color:unit==="cho"?"#fff":"#aaa"}}>兆</button>
             <button onClick={()=>setUnit("oku")} style={{padding:"3px 8px",border:"none",cursor:"pointer",fontFamily:"inherit",background:unit==="oku"?"#434343":"#fff",color:unit==="oku"?"#fff":"#aaa"}}>億</button>
           </div>
-          <button style={{background:"none",border:"none",fontSize:18,color:"#bbb",cursor:"pointer",fontFamily:"inherit"}}>↑</button>
+          <button style={{background:"none",border:"none",fontSize:18,color:"#ddd",cursor:"default",fontFamily:"inherit",opacity:0.5}} disabled>↑</button>
         </div>
         <div style={{fontSize:26,fontWeight:700,color:isDobun?"#E24B4A":C}}>
           {isDobun?"ドボン！":"結果発表"}
