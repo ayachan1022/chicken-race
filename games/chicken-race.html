@@ -104,11 +104,22 @@ function selectCompanies(allCompanies) {
     byRank[c.rankCD].push(c);
   });
   const result = [];
+  const usedCodes = new Set();
+  let shortfall = 0;
   Object.entries(RANK_LIMITS).forEach(([rankCD, limit]) => {
     const pool = byRank[Number(rankCD)] || [];
     const shuffled = [...pool].sort(() => Math.random() - 0.5);
-    result.push(...shuffled.slice(0, limit));
+    const picked = shuffled.slice(0, limit);
+    picked.forEach(c => usedCodes.add(c.code));
+    result.push(...picked);
+    if (picked.length < limit) shortfall += (limit - picked.length);
   });
+  // ランク別の母数が不足していた場合、他のランクの余り企業からランダムに補充して総数を維持する
+  if (shortfall > 0) {
+    const remaining = allCompanies.filter(c => !usedCodes.has(c.code));
+    const shuffledRemaining = [...remaining].sort(() => Math.random() - 0.5);
+    result.push(...shuffledRemaining.slice(0, shortfall));
+  }
   return result.sort((a, b) => a.code.localeCompare(b.code, undefined, {numeric: true}));
 }
 
@@ -585,6 +596,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
   const [currentTurn, setCurrentTurn]   = useState(null);
   const [turnTimeLeft, setTurnTimeLeft] = useState(60);
   const [showTimeUp, setShowTimeUp]     = useState(false);
+  const [showAllSelected, setShowAllSelected] = useState(false); // 全企業選択完了メッセージ
 
   const stopTimerRef    = useRef(null);
   const turnTimerRef    = useRef(null);
@@ -594,9 +606,26 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
   const myStoppedRef    = useRef(false);
   const oppSelectedRef  = useRef([]);
   const gameEndedRef    = useRef(false);
+  const allSelCodesRef  = useRef(new Set());
+  const allSelectedTriggeredRef = useRef(false); // 全企業選択メッセージの二重発火防止
   const oppRole         = role==="host" ? "guest" : "host";
   const roomRef         = useRef(db.ref(`rooms/${roomId}`)).current;
   const isMyTurn        = currentTurn === role && !myStopped;
+
+  // 両者の選択を合わせて企業リストの母数に達したかをその場で判定する
+  // （useEffectのstate更新待ちだと検知が遅れる/取りこぼすケースがあったため、
+  //   選択が確定した瞬間に同期的にチェックする方式に変更）
+  function checkAllSelected(){
+    if(companies.length>0 && allSelCodesRef.current.size >= companies.length
+       && !gameEndedRef.current && !allSelectedTriggeredRef.current){
+      allSelectedTriggeredRef.current = true;
+      clearInterval(turnTimerRef.current);
+      setShowAllSelected(true);
+      setTimeout(()=>{ handleGameEnd(); }, 1800);
+      return true;
+    }
+    return false;
+  }
 
   // 相手のターン開始をトーストで通知（選択通知と同じ見せ方）
   function showOppTurnToast(){
@@ -608,6 +637,8 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
   useEffect(()=>{
     if(currentTurn===null) return;
     clearInterval(turnTimerRef.current);
+    // 安全策：ターンが回ってきた時点ですでに全企業選択済みなら、タイマーを開始せず終了させる
+    if(checkAllSelected()) return;
     setTurnTimeLeft(60);
     if(currentTurn === role && !myStoppedRef.current){
       turnTimerRef.current = setInterval(()=>{
@@ -662,7 +693,9 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
       const oppList = codes.map(code=>companies.find(c=>c.code===code)).filter(Boolean);
       oppSelectedRef.current = oppList;
       setOppSelected(oppList);
-      setAllSelCodes(prev=>{ const next=new Set(prev); codes.forEach(c=>next.add(c)); return next; });
+      codes.forEach(c=>allSelCodesRef.current.add(c));
+      setAllSelCodes(new Set(allSelCodesRef.current));
+      checkAllSelected();
     });
 
     // ターンを購読
@@ -681,12 +714,21 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
       if(snap.val()===true){
         setOppStopped(true);
         setShowOppStopped(true); // ①オーバーレイ表示
-        if(!myStoppedRef.current){
-          setStopTimeLeft(120);
-        } else {
+        if(myStoppedRef.current){
           handleGameEnd();
         }
+        // stopTimeLeftの起動はdeadlineAt購読側に一本化（下記useEffect参照）
       }
+    });
+
+    // 締切（deadlineAt）をFirebaseから購読：どちらの端末でも同じ締切を共有し、
+    // 締切に達した側が誰でもゲームを終了できるようにする（host限定バグの回避）
+    const deadlineRef = roomRef.child("timer/deadlineAt");
+    deadlineRef.on("value", snap=>{
+      const deadline = snap.val();
+      if(!deadline || myStoppedRef.current) return;
+      const remain = Math.max(0, Math.round((deadline - Date.now())/1000));
+      setStopTimeLeft(remain);
     });
 
     // 切断検知
@@ -733,6 +775,7 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
     roomRef.child(`players/${oppRole}/stopped`).off();
     roomRef.child(`players/${oppRole}/connected`).off();
     roomRef.child("turn/current").off();
+    roomRef.child("timer/deadlineAt").off();
     if(role === "guest") roomRef.child("status").off();
     clearInterval(turnTimerRef.current);
     clearTimeout(stopTimerRef.current);
@@ -756,9 +799,10 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
     if(gameEndedRef.current) return;
     gameEndedRef.current = true;
     cleanup();
-    if(role === "host"){
-      roomRef.child("status").set("finished");
-    }
+    // host/guestどちらが締切に到達しても終了を書き込めるようにする
+    // （以前はhost限定だったため、hostが先にSTOPしゲストが時間切れになると
+    //  statusが更新されずhost側が固まる不具合があった）
+    roomRef.child("status").set("finished");
     onGameEnd(mySelRef.current, oppSelectedRef.current, guessRef.current, isDisconnect);
   }
 
@@ -782,7 +826,9 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
         const next=[...mySelRef.current, c];
         mySelRef.current=next;
         setMySelected(next);
-        setAllSelCodes(prev=>{ const n=new Set(prev); n.add(c.code); return n; });
+        allSelCodesRef.current.add(c.code);
+        setAllSelCodes(new Set(allSelCodesRef.current));
+        if(checkAllSelected()) return; // 全企業選択済みならターン交代せず終了
         if(!oppStopped){
           clearInterval(turnTimerRef.current);
           advanceTurn();
@@ -797,6 +843,15 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
     clearInterval(turnTimerRef.current);
     roomRef.child(`players/${role}/stopped`).set(true);
     roomRef.child(`players/${role}/stoppedAt`).set(firebase.database.ServerValue.TIMESTAMP);
+    if(!oppStopped){
+      // 自分が最初にSTOPした側：2分後の締切をFirebaseに書き込み、両者が同じ締切を参照できるようにする
+      roomRef.child("timer/deadlineAt").set(firebase.database.ServerValue.TIMESTAMP).then(()=>{
+        roomRef.child("timer/deadlineAt").once("value", snap=>{
+          const t = snap.val();
+          if(t) roomRef.child("timer/deadlineAt").set(t + 120000);
+        });
+      });
+    }
     if(oppStopped){ handleGameEnd(); }
   }
 
@@ -882,6 +937,15 @@ function VsGameScreen({difficulty, companies, role, roomId, uid, onGameEnd, onRe
           <div style={{background:"#fff",borderRadius:16,padding:"28px 24px",textAlign:"center",margin:"0 32px",maxWidth:280,width:"100%"}}>
             <div style={{fontSize:15,fontWeight:600,color:"#E24B4A",marginBottom:6}}>時間切れ</div>
             <div style={{fontSize:13,color:"#aaa"}}>相手のターンになります</div>
+          </div>
+        </div>
+      )}
+
+      {showAllSelected && (
+        <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:25}}>
+          <div style={{background:"#fff",borderRadius:16,padding:"28px 24px",textAlign:"center",margin:"0 32px",maxWidth:280,width:"100%"}}>
+            <div style={{fontSize:15,fontWeight:600,color:C,marginBottom:6}}>全企業が選択されました</div>
+            <div style={{fontSize:13,color:"#aaa"}}>結果発表に進みます…</div>
           </div>
         </div>
       )}
