@@ -3,6 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+(function(){
+  var h = location.hostname;
+  if (h.indexOf('.github.io') !== -1) {
+    var parts = location.pathname.split('/').filter(Boolean);
+    parts.shift();
+    var newPath = '/' + parts.join('/');
+    location.replace('https://uika-lab.jp' + newPath + location.search + location.hash);
+  }
+})();
+</script>
+<link rel="canonical" href="https://uika-lab.jp/terms.html">
 <title>利用規約｜時価総額チキンレース</title>
 <link href="https://fonts.googleapis.com/css2?family=Sawarabi+Mincho&display=swap" rel="stylesheet">
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4760212589463601"
@@ -31,7 +43,7 @@ p{font-size:13px;color:#555;margin-bottom:8px;}
 
   <div class="content">
     <h1>利用規約</h1>
-    <p class="updated">最終更新日：2026年7月</p>
+    <p class="updated">最終更新日：2025年6月</p>
 
     <p>本利用規約（以下「本規約」）は、uika（以下「運営者」）が提供する時価総額チキンレース（以下「本サービス」）の利用条件を定めるものです。本サービスをご利用いただくことで、本規約に同意したものとみなします。</p>
 
