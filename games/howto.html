@@ -3,6 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+(function(){
+  var h = location.hostname;
+  if (h.indexOf('.github.io') !== -1) {
+    var parts = location.pathname.split('/').filter(Boolean);
+    parts.shift();
+    var newPath = '/' + parts.join('/');
+    location.replace('https://uika-lab.jp' + newPath + location.search + location.hash);
+  }
+})();
+</script>
+<link rel="canonical" href="https://uika-lab.jp/games/howto.html">
 <title>遊び方｜時価総額チキンレース</title>
 <link href="https://fonts.googleapis.com/css2?family=Sawarabi+Mincho&display=swap" rel="stylesheet">
 <style>
